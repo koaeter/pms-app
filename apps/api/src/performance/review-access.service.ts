@@ -18,11 +18,47 @@ export class ReviewAccessService {
   async assertSupervisor(organizationId: string, reviewId: string, userId: string) {
     const review = await this.prisma.performanceReview.findFirst({
       where: { id: reviewId, employee: { organizationId } },
-      select: { supervisorEmployeeIdSnapshot: true },
+      select: { employeeId: true, supervisorEmployeeIdSnapshot: true },
     });
     if (!review) throw new NotFoundException('Performance review not found');
-    if (!review.supervisorEmployeeIdSnapshot) throw new ForbiddenException('This review has no assigned supervisor');
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { employeeId: true } });
-    if (!user || user.employeeId !== review.supervisorEmployeeIdSnapshot) throw new ForbiddenException('Only the assigned supervisor may perform this action');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { employeeId: true, roles: { include: { role: true } } },
+    });
+    if (!user?.employeeId) throw new ForbiddenException('Only an assigned supervisor may perform this action');
+    if (user.employeeId === review.supervisorEmployeeIdSnapshot) return;
+
+    const elevated = user.roles.some((userRole) => ['HOD', 'SUPER_ADMIN'].includes(userRole.role.code));
+    if (!elevated) throw new ForbiddenException('Only the assigned supervisor may perform this action');
+    if (user.roles.some((userRole) => userRole.role.code === 'SUPER_ADMIN')) return;
+
+    const assignments = await this.prisma.employeeOrganizationalUnit.findMany({
+      where: { supervisorEmployeeId: user.employeeId, isPrimary: true, endDate: null },
+      select: { organizationalUnitId: true },
+    });
+    const unitIds = new Set(assignments.map((assignment) => assignment.organizationalUnitId));
+    if (!unitIds.size) throw new ForbiddenException('You are not assigned to an organizational unit');
+
+    const units = await this.prisma.organizationalUnit.findMany({
+      where: { organizationId, active: true },
+      select: { id: true, parentId: true },
+    });
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const unit of units) {
+        if (unit.parentId && unitIds.has(unit.parentId) && !unitIds.has(unit.id)) {
+          unitIds.add(unit.id);
+          changed = true;
+        }
+      }
+    }
+
+    const employeeAssignment = await this.prisma.employeeOrganizationalUnit.findFirst({
+      where: { employeeId: review.employeeId, organizationalUnitId: { in: [...unitIds] }, isPrimary: true, endDate: null },
+      select: { id: true },
+    });
+    if (!employeeAssignment) throw new ForbiddenException('You are not authorized to assess this review');
   }
 }
