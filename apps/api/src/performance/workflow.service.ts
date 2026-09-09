@@ -3,142 +3,18 @@ import { PrismaService } from '../prisma.service';
 import { WorkflowActionType, WorkflowActorType, WorkflowStatus, PerformanceReviewStatus } from '@prisma/client';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { WorkflowActionDto } from './dto/workflow-action.dto';
-
 @Injectable()
 export class WorkflowService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async listWorkflows(organizationId: string) {
-    return this.prisma.workflow.findMany({ where: { organizationId, active: true }, include: { performanceReviewType: true, steps: { orderBy: { stepOrder: 'asc' } } }, orderBy: { name: 'asc' } });
-  }
-
-  async createWorkflow(organizationId: string, dto: CreateWorkflowDto) {
-    if (!dto.steps?.length) throw new ConflictException('A workflow must contain at least one step');
-    const orders = dto.steps.map((step) => step.stepOrder);
-    if (new Set(orders).size !== orders.length) throw new ConflictException('Workflow step orders must be unique');
-    if (Math.min(...orders) !== 1 || !orders.every((order, index) => order === index + 1)) throw new ConflictException('Workflow steps must be numbered consecutively from 1');
-    if (dto.steps.some((step) => step.actorType === WorkflowActorType.ROLE && !step.actorRoleId)) throw new ConflictException('ROLE workflow steps require actorRoleId');
-    if (dto.steps.some((step) => step.actorType === WorkflowActorType.SPECIFIC_USER && !step.actorUserId)) throw new ConflictException('SPECIFIC_USER workflow steps require actorUserId');
-    if (dto.performanceReviewTypeId) {
-      const type = await this.prisma.performanceReviewType.findFirst({ where: { id: dto.performanceReviewTypeId, program: { organizationId } } });
-      if (!type) throw new NotFoundException('Performance review type not found');
-    }
-    try {
-      return await this.prisma.workflow.create({ data: { organizationId, performanceReviewTypeId: dto.performanceReviewTypeId ?? null, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null, steps: { create: dto.steps.map((step) => ({ stepOrder: step.stepOrder, name: step.name.trim(), description: step.description?.trim() || null, actorType: step.actorType, actorRoleId: step.actorRoleId ?? null, actorUserId: step.actorUserId ?? null, required: step.required ?? true, canReturn: step.canReturn ?? true, canReject: step.canReject ?? false })) } }, include: { steps: { orderBy: { stepOrder: 'asc' } } } });
-    } catch (error) {
-      if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Workflow code already exists');
-      throw error;
-    }
-  }
-
-  async getReviewWorkflow(organizationId: string, reviewId: string) {
-    const review = await this.prisma.performanceReview.findFirst({ where: { id: reviewId, employee: { organizationId } }, include: { workflowInstance: { include: { workflow: { include: { steps: { orderBy: { stepOrder: 'asc' } } } }, currentStep: true, actions: { orderBy: { createdAt: 'asc' }, include: { workflowStep: true, user: { include: { employee: true } } } } } } } });
-    if (!review) throw new NotFoundException('Performance review not found');
-    return review.workflowInstance;
-  }
-
-  async submit(organizationId: string, reviewId: string, userId: string, dto: WorkflowActionDto) {
-    const review = await this.requireReview(organizationId, reviewId);
-    if (review.employee.user?.id !== userId) throw new ForbiddenException('Only the review employee can submit this review');
-    if (![PerformanceReviewStatus.DRAFT, PerformanceReviewStatus.IN_PROGRESS, PerformanceReviewStatus.RETURNED, PerformanceReviewStatus.RESUBMITTED].includes(review.status)) throw new ConflictException('This review cannot be submitted from its current status');
-    const workflow = await this.resolveWorkflow(organizationId, review.reviewTypeId);
-    const firstStep = workflow.steps[0];
-    const now = new Date();
-    const instance = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.workflowInstance.create({ data: { workflowId: workflow.id, performanceReviewId: review.id, currentStepId: firstStep.id, status: WorkflowStatus.IN_PROGRESS, startedAt: now, actions: { create: { workflowStepId: firstStep.id, performedBy: userId, action: review.status === PerformanceReviewStatus.RETURNED ? WorkflowActionType.RESUBMIT : WorkflowActionType.SUBMIT, comment: dto.comment?.trim() || null } } }, include: { currentStep: true } });
-      await tx.performanceReview.update({ where: { id: review.id }, data: { status: review.status === PerformanceReviewStatus.RETURNED ? PerformanceReviewStatus.RESUBMITTED : PerformanceReviewStatus.SUBMITTED, submittedAt: now } });
-      return created;
-    });
-    await this.notifyActor(organizationId, review.id, firstStep, userId);
-    return instance;
-  }
-
-  async act(organizationId: string, reviewId: string, userId: string, action: WorkflowActionType, dto: WorkflowActionDto) {
-    const review = await this.requireReview(organizationId, reviewId);
-    const instance = await this.prisma.workflowInstance.findUnique({ where: { performanceReviewId: review.id }, include: { currentStep: true, workflow: { include: { steps: { orderBy: { stepOrder: 'asc' } } } } } });
-    if (!instance || !instance.currentStep) throw new ConflictException('This review has no active workflow');
-    if (![WorkflowStatus.IN_PROGRESS, WorkflowStatus.RETURNED].includes(instance.status)) throw new ConflictException('This workflow is not active');
-    if (!(await this.canAct(instance.currentStep.id, review.id, userId))) throw new ForbiddenException('You are not an authorized actor for this workflow step');
-    if (action === WorkflowActionType.DELEGATE) return this.delegate(organizationId, review.id, instance, userId, dto);
-    if (action === WorkflowActionType.RETURN && !instance.currentStep.canReturn) throw new ConflictException('This workflow step does not allow return');
-    if (action === WorkflowActionType.REJECT && !instance.currentStep.canReject) throw new ConflictException('This workflow step does not allow rejection');
-    if (![WorkflowActionType.APPROVE, WorkflowActionType.RETURN, WorkflowActionType.REJECT, WorkflowActionType.CANCEL].includes(action)) throw new ConflictException('Unsupported workflow action');
-    const steps = instance.workflow.steps;
-    const index = steps.findIndex((step) => step.id === instance.currentStepId);
-    const nextStep = action === WorkflowActionType.APPROVE ? steps[index + 1] : undefined;
-    const now = new Date();
-    const completed = action === WorkflowActionType.APPROVE && !nextStep;
-    const newStatus = action === WorkflowActionType.RETURN ? WorkflowStatus.RETURNED : action === WorkflowActionType.REJECT ? WorkflowStatus.REJECTED : action === WorkflowActionType.CANCEL ? WorkflowStatus.CANCELLED : completed ? WorkflowStatus.COMPLETED : WorkflowStatus.IN_PROGRESS;
-    const reviewStatus = action === WorkflowActionType.RETURN ? PerformanceReviewStatus.RETURNED : action === WorkflowActionType.REJECT ? PerformanceReviewStatus.REJECTED : action === WorkflowActionType.CANCEL ? PerformanceReviewStatus.CANCELLED : completed ? PerformanceReviewStatus.APPROVED : PerformanceReviewStatus.UNDER_REVIEW;
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.workflowInstance.update({ where: { id: instance.id }, data: { status: newStatus, currentStepId: nextStep?.id ?? null, completedAt: completed || [WorkflowActionType.RETURN, WorkflowActionType.REJECT, WorkflowActionType.CANCEL].includes(action) ? now : null, actions: { create: { workflowStepId: instance.currentStep.id, performedBy: userId, action, comment: dto.comment?.trim() || null } } }, include: { currentStep: true } });
-      await tx.performanceReview.update({ where: { id: review.id }, data: { status: reviewStatus, completedAt: completed ? now : undefined } });
-      return updated;
-    });
-  }
-
-  private async delegate(organizationId: string, reviewId: string, instance: { id: string; currentStepId: string | null }, userId: string, dto: WorkflowActionDto) {
-    if (!dto.delegateToUserId) throw new ConflictException('delegateToUserId is required');
-    if (dto.delegateToUserId === userId) throw new ConflictException('A user cannot delegate to themselves');
-    const target = await this.prisma.user.findFirst({ where: { id: dto.delegateToUserId, employee: { organizationId }, accountStatus: 'ACTIVE' } });
-    if (!target) throw new NotFoundException('Delegation target not found');
-    const now = new Date();
-    const end = new Date(now); end.setDate(end.getDate() + 30);
-    return this.prisma.$transaction(async (tx) => {
-      await tx.delegation.create({ data: { delegatedBy: userId, delegatedTo: dto.delegateToUserId!, workflowId: instance.id, startDate: now, endDate: end, reason: dto.comment?.trim() || null } });
-      return tx.workflowAction.create({ data: { workflowInstanceId: instance.id, workflowStepId: instance.currentStepId!, performedBy: userId, action: WorkflowActionType.DELEGATE, comment: dto.comment?.trim() || `Delegated to ${target.username}` } });
-    });
-  }
-
-  private async canAct(stepId: string, reviewId: string, userId: string) {
-    const step = await this.prisma.workflowStep.findUnique({ where: { id: stepId }, include: { actorRole: true } });
-    if (!step) return false;
-    const review = await this.prisma.performanceReview.findUnique({ where: { id: reviewId }, include: { employee: true } });
-    if (!review) return false;
-    if (step.actorType === WorkflowActorType.SPECIFIC_USER) return step.actorUserId === userId;
-    if (step.actorType === WorkflowActorType.EMPLOYEE) return review.employee.user?.id === userId;
-    if (step.actorType === WorkflowActorType.DIRECT_SUPERVISOR) return !!(await this.prisma.employeeOrganizationalUnit.findFirst({ where: { employeeId: review.employeeId, supervisorEmployeeId: { not: null }, supervisor: { user: { id: userId } }, endDate: null } }));
-    if (step.actorType === WorkflowActorType.ORG_UNIT_HEAD) return !!(await this.prisma.organizationalUnit.findFirst({ where: { id: review.organizationUnitIdSnapshot ?? undefined, headEmployee: { user: { id: userId } } } }));
-    if (step.actorType === WorkflowActorType.ROLE || step.actorType === WorkflowActorType.HR || step.actorType === WorkflowActorType.PMS_ADMIN) {
-      const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { roles: { include: { role: true } } } });
-      if (!user) return false;
-      if (step.actorType === WorkflowActorType.ROLE) return user.roles.some((ur) => ur.roleId === step.actorRoleId && (!ur.expiresAt || ur.expiresAt > new Date()));
-      const code = step.actorType === WorkflowActorType.HR ? 'HR_OFFICER' : 'PMS_ADMIN';
-      return user.roles.some((ur) => ur.role.code === code && (!ur.expiresAt || ur.expiresAt > new Date()));
-    }
-    return false;
-  }
-
-  private async resolveWorkflow(organizationId: string, reviewTypeId: string) {
-    const workflow = await this.prisma.workflow.findFirst({ where: { organizationId, active: true, performanceReviewTypeId: reviewTypeId }, include: { steps: { orderBy: { stepOrder: 'asc' } } } });
-    if (workflow) return workflow;
-    const fallback = await this.prisma.workflow.findFirst({ where: { organizationId, active: true, performanceReviewTypeId: null }, include: { steps: { orderBy: { stepOrder: 'asc' } } } });
-    if (!fallback) throw new ConflictException('No active workflow is configured for this review type');
-    return fallback;
-  }
-
-  private async requireReview(organizationId: string, reviewId: string) {
-    const review = await this.prisma.performanceReview.findFirst({ where: { id: reviewId, employee: { organizationId } }, include: { employee: { include: { user: true } } } });
-    if (!review) throw new NotFoundException('Performance review not found');
-    return review;
-  }
-
-  private async notifyActor(organizationId: string, reviewId: string, step: { id: string; actorType: WorkflowActorType; actorRoleId: string | null; actorUserId: string | null }, excludeUserId: string) {
-    const users = await this.resolveActors(organizationId, reviewId, step);
-    if (!users.length) return;
-    await this.prisma.notification.createMany({ data: users.filter((id) => id !== excludeUserId).map((userId) => ({ userId, type: 'WORKFLOW', title: 'Performance review requires action', message: 'A performance review has entered a workflow step assigned to you.', entityType: 'PerformanceReview', entityId: reviewId })) });
-  }
-
-  private async resolveActors(organizationId: string, reviewId: string, step: { actorType: WorkflowActorType; actorRoleId: string | null; actorUserId: string | null }) {
-    const review = await this.prisma.performanceReview.findUnique({ where: { id: reviewId }, include: { employee: true } });
-    if (!review) return [];
-    if (step.actorType === WorkflowActorType.SPECIFIC_USER) return step.actorUserId ? [step.actorUserId] : [];
-    if (step.actorType === WorkflowActorType.EMPLOYEE) { const user = await this.prisma.user.findUnique({ where: { employeeId: review.employeeId } }); return user ? [user.id] : []; }
-    if (step.actorType === WorkflowActorType.DIRECT_SUPERVISOR) { const assignment = await this.prisma.employeeOrganizationalUnit.findFirst({ where: { employeeId: review.employeeId, supervisorEmployeeId: { not: null }, endDate: null }, include: { supervisor: { include: { user: true } } } }); return assignment?.supervisor?.user ? [assignment.supervisor.user.id] : []; }
-    if (step.actorType === WorkflowActorType.ORG_UNIT_HEAD) { const unit = review.organizationUnitIdSnapshot ? await this.prisma.organizationalUnit.findUnique({ where: { id: review.organizationUnitIdSnapshot }, include: { headEmployee: { include: { user: true } } } }) : null; return unit?.headEmployee?.user ? [unit.headEmployee.user.id] : []; }
-    const code = step.actorType === WorkflowActorType.HR ? 'HR_OFFICER' : step.actorType === WorkflowActorType.PMS_ADMIN ? 'PMS_ADMIN' : null;
-    if (step.actorType === WorkflowActorType.ROLE && step.actorRoleId) { const roles = await this.prisma.userRole.findMany({ where: { roleId: step.actorRoleId, user: { employee: { organizationId } } } }); return roles.map((r) => r.userId); }
-    if (code) { const roles = await this.prisma.userRole.findMany({ where: { role: { code }, user: { employee: { organizationId } } } }); return roles.map((r) => r.userId); }
-    return [];
-  }
+ constructor(private readonly prisma:PrismaService){}
+ async listWorkflows(organizationId:string){return this.prisma.workflow.findMany({where:{organizationId,active:true},include:{performanceReviewType:true,steps:{orderBy:{stepOrder:'asc'}}},orderBy:{name:'asc'}})}
+ async createWorkflow(organizationId:string,dto:CreateWorkflowDto){if(!dto.steps?.length)throw new ConflictException('A workflow must contain at least one step');const orders=dto.steps.map(s=>s.stepOrder);if(new Set(orders).size!==orders.length||Math.min(...orders)!==1||!orders.every((o,i)=>o===i+1))throw new ConflictException('Workflow steps must be numbered consecutively from 1');if(dto.steps.some(s=>s.actorType===WorkflowActorType.ROLE&&!s.actorRoleId))throw new ConflictException('ROLE workflow steps require actorRoleId');if(dto.steps.some(s=>s.actorType===WorkflowActorType.SPECIFIC_USER&&!s.actorUserId))throw new ConflictException('SPECIFIC_USER workflow steps require actorUserId');if(dto.performanceReviewTypeId&&!await this.prisma.performanceReviewType.findFirst({where:{id:dto.performanceReviewTypeId,program:{organizationId}}}))throw new NotFoundException('Performance review type not found');try{return await this.prisma.workflow.create({data:{organizationId,performanceReviewTypeId:dto.performanceReviewTypeId??null,name:dto.name.trim(),code:dto.code.trim().toUpperCase(),description:dto.description?.trim()||null,steps:{create:dto.steps.map(s=>({stepOrder:s.stepOrder,name:s.name.trim(),description:s.description?.trim()||null,actorType:s.actorType,actorRoleId:s.actorRoleId??null,actorUserId:s.actorUserId??null,required:s.required??true,canReturn:s.canReturn??true,canReject:s.canReject??false}))}},include:{steps:{orderBy:{stepOrder:'asc'}}}})}catch(e){if((e as any).code==='P2002')throw new ConflictException('Workflow code already exists');throw e}}
+ async getReviewWorkflow(organizationId:string,reviewId:string){const review=await this.prisma.performanceReview.findFirst({where:{id:reviewId,employee:{organizationId}},include:{workflowInstance:{include:{workflow:{include:{steps:{orderBy:{stepOrder:'asc'}}}},currentStep:true,actions:{orderBy:{createdAt:'asc'},include:{workflowStep:true,user:{include:{employee:true}}}}}}});if(!review)throw new NotFoundException('Performance review not found');return review.workflowInstance}
+ async submit(organizationId:string,reviewId:string,userId:string,dto:WorkflowActionDto){const review=await this.requireReview(organizationId,reviewId);if(review.employee.user?.id!==userId)throw new ForbiddenException('Only the review employee can submit this review');const submitStatuses:PerformanceReviewStatus[]=[PerformanceReviewStatus.DRAFT,PerformanceReviewStatus.IN_PROGRESS,PerformanceReviewStatus.RETURNED,PerformanceReviewStatus.RESUBMITTED];if(!submitStatuses.includes(review.status))throw new ConflictException('This review cannot be submitted from its current status');const workflow=await this.resolveWorkflow(organizationId,review.reviewTypeId);const firstStep=workflow.steps[0];if(!firstStep)throw new ConflictException('Configured workflow has no steps');const now=new Date();const instance=await this.prisma.$transaction(async tx=>{const created=await tx.workflowInstance.create({data:{workflowId:workflow.id,performanceReviewId:review.id,currentStepId:firstStep.id,status:WorkflowStatus.IN_PROGRESS,startedAt:now,actions:{create:{workflowStepId:firstStep.id,performedBy:userId,action:review.status===PerformanceReviewStatus.RETURNED?WorkflowActionType.RESUBMIT:WorkflowActionType.SUBMIT,comment:dto.comment?.trim()||null}}},include:{currentStep:true}});await tx.performanceReview.update({where:{id:review.id},data:{status:review.status===PerformanceReviewStatus.RETURNED?PerformanceReviewStatus.RESUBMITTED:PerformanceReviewStatus.SUBMITTED,submittedAt:now}});return created});await this.notifyActor(organizationId,review.id,firstStep,userId);return instance}
+ async act(organizationId:string,reviewId:string,userId:string,action:WorkflowActionType,dto:WorkflowActionDto){const review=await this.requireReview(organizationId,reviewId);const instance=await this.prisma.workflowInstance.findUnique({where:{performanceReviewId:review.id},include:{currentStep:true,workflow:{include:{steps:{orderBy:{stepOrder:'asc'}}}}}});if(!instance||!instance.currentStep)throw new ConflictException('This review has no active workflow');const currentStep=instance.currentStep;const activeStatuses:WorkflowStatus[]=[WorkflowStatus.IN_PROGRESS,WorkflowStatus.RETURNED];if(!activeStatuses.includes(instance.status))throw new ConflictException('This workflow is not active');if(!(await this.canAct(currentStep.id,review.id,userId)))throw new ForbiddenException('You are not an authorized actor for this workflow step');if(action===WorkflowActionType.DELEGATE)return this.delegate(organizationId,review.id,instance,userId,dto);if(action===WorkflowActionType.RETURN&&!currentStep.canReturn)throw new ConflictException('This workflow step does not allow return');if(action===WorkflowActionType.REJECT&&!currentStep.canReject)throw new ConflictException('This workflow step does not allow rejection');const actionable:WorkflowActionType[]=[WorkflowActionType.APPROVE,WorkflowActionType.RETURN,WorkflowActionType.REJECT,WorkflowActionType.CANCEL];if(!actionable.includes(action))throw new ConflictException('Unsupported workflow action');const steps=instance.workflow.steps;const index=steps.findIndex(s=>s.id===instance.currentStepId);const nextStep=action===WorkflowActionType.APPROVE?steps[index+1]:undefined;const now=new Date();const completed=action===WorkflowActionType.APPROVE&&!nextStep;const newStatus=action===WorkflowActionType.RETURN?WorkflowStatus.RETURNED:action===WorkflowActionType.REJECT?WorkflowStatus.REJECTED:action===WorkflowActionType.CANCEL?WorkflowStatus.CANCELLED:completed?WorkflowStatus.COMPLETED:WorkflowStatus.IN_PROGRESS;const reviewStatus=action===WorkflowActionType.RETURN?PerformanceReviewStatus.RETURNED:action===WorkflowActionType.REJECT?PerformanceReviewStatus.REJECTED:action===WorkflowActionType.CANCEL?PerformanceReviewStatus.CANCELLED:completed?PerformanceReviewStatus.APPROVED:PerformanceReviewStatus.UNDER_REVIEW;return this.prisma.$transaction(async tx=>{const updated=await tx.workflowInstance.update({where:{id:instance.id},data:{status:newStatus,currentStepId:nextStep?.id??null,completedAt:completed||[WorkflowActionType.RETURN,WorkflowActionType.REJECT,WorkflowActionType.CANCEL].includes(action)?now:null,actions:{create:{workflowStepId:currentStep.id,performedBy:userId,action,comment:dto.comment?.trim()||null}}},include:{currentStep:true}});await tx.performanceReview.update({where:{id:review.id},data:{status:reviewStatus,completedAt:completed?now:undefined}});return updated})}
+ private async delegate(_organizationId:string,_reviewId:string,instance:{id:string;currentStepId:string|null},userId:string,dto:WorkflowActionDto){if(!dto.delegateToUserId)throw new ConflictException('delegateToUserId is required');if(dto.delegateToUserId===userId)throw new ConflictException('A user cannot delegate to themselves');const target=await this.prisma.user.findFirst({where:{id:dto.delegateToUserId,employee:{organizationId:_organizationId},accountStatus:'ACTIVE'}});if(!target)throw new NotFoundException('Delegation target not found');const now=new Date();const end=new Date(now);end.setDate(end.getDate()+30);return this.prisma.$transaction(async tx=>{await tx.delegation.create({data:{delegatedBy:userId,delegatedTo:dto.delegateToUserId!,workflowId:instance.id,startDate:now,endDate:end,reason:dto.comment?.trim()||null}});return tx.workflowAction.create({data:{workflowInstanceId:instance.id,workflowStepId:instance.currentStepId!,performedBy:userId,action:WorkflowActionType.DELEGATE,comment:dto.comment?.trim()||`Delegated to ${target.username}`}})})}
+ private async canAct(stepId:string,reviewId:string,userId:string){const step=await this.prisma.workflowStep.findUnique({where:{id:stepId},include:{actorRole:true}});if(!step)return false;const review=await this.prisma.performanceReview.findUnique({where:{id:reviewId},include:{employee:{include:{user:true}}}});if(!review)return false;if(step.actorType===WorkflowActorType.SPECIFIC_USER)return step.actorUserId===userId;if(step.actorType===WorkflowActorType.EMPLOYEE)return review.employee.user?.id===userId;if(step.actorType===WorkflowActorType.DIRECT_SUPERVISOR)return !!(await this.prisma.employeeOrganizationalUnit.findFirst({where:{employeeId:review.employeeId,supervisorEmployeeId:{not:null},supervisor:{user:{id:userId}},endDate:null}}));if(step.actorType===WorkflowActorType.ORG_UNIT_HEAD)return !!(await this.prisma.organizationalUnit.findFirst({where:{id:review.organizationUnitIdSnapshot??undefined,headEmployee:{user:{id:userId}}}}));if(step.actorType===WorkflowActorType.ROLE||step.actorType===WorkflowActorType.HR||step.actorType===WorkflowActorType.PMS_ADMIN){const user=await this.prisma.user.findUnique({where:{id:userId},include:{roles:{include:{role:true}}}});if(!user)return false;if(step.actorType===WorkflowActorType.ROLE)return user.roles.some(ur=>ur.roleId===step.actorRoleId&&(!ur.expiresAt||ur.expiresAt>new Date()));const code=step.actorType===WorkflowActorType.HR?'HR_OFFICER':'PMS_ADMIN';return user.roles.some(ur=>ur.role.code===code&&(!ur.expiresAt||ur.expiresAt>new Date()))}return false}
+ private async resolveWorkflow(organizationId:string,reviewTypeId:string){const workflow=await this.prisma.workflow.findFirst({where:{organizationId,active:true,performanceReviewTypeId:reviewTypeId},include:{steps:{orderBy:{stepOrder:'asc'}}}});if(workflow)return workflow;const fallback=await this.prisma.workflow.findFirst({where:{organizationId,active:true,performanceReviewTypeId:null},include:{steps:{orderBy:{stepOrder:'asc'}}}});if(!fallback)throw new ConflictException('No active workflow is configured for this review type');return fallback}
+ private async requireReview(organizationId:string,reviewId:string){const review=await this.prisma.performanceReview.findFirst({where:{id:reviewId,employee:{organizationId}},include:{employee:{include:{user:true}}}});if(!review)throw new NotFoundException('Performance review not found');return review}
+ private async notifyActor(organizationId:string,reviewId:string,step:{id:string;actorType:WorkflowActorType;actorRoleId:string|null;actorUserId:string|null},excludeUserId:string){const users=await this.resolveActors(organizationId,reviewId,step);if(!users.length)return;await this.prisma.notification.createMany({data:users.filter(id=>id!==excludeUserId).map(userId=>({userId,type:'WORKFLOW',title:'Performance review requires action',message:'A performance review has entered a workflow step assigned to you.',entityType:'PerformanceReview',entityId:reviewId}))})}
+ private async resolveActors(organizationId:string,reviewId:string,step:{actorType:WorkflowActorType;actorRoleId:string|null;actorUserId:string|null}){const review=await this.prisma.performanceReview.findUnique({where:{id:reviewId},include:{employee:true}});if(!review)return[];if(step.actorType===WorkflowActorType.SPECIFIC_USER)return step.actorUserId?[step.actorUserId]:[];if(step.actorType===WorkflowActorType.EMPLOYEE){const user=await this.prisma.user.findUnique({where:{employeeId:review.employeeId}});return user?[user.id]:[]}if(step.actorType===WorkflowActorType.DIRECT_SUPERVISOR){const assignment=await this.prisma.employeeOrganizationalUnit.findFirst({where:{employeeId:review.employeeId,supervisorEmployeeId:{not:null},endDate:null},include:{supervisor:{include:{user:true}}}});return assignment?.supervisor?.user?[assignment.supervisor.user.id]:[]}if(step.actorType===WorkflowActorType.ORG_UNIT_HEAD){const unit=review.organizationUnitIdSnapshot?await this.prisma.organizationalUnit.findUnique({where:{id:review.organizationUnitIdSnapshot},include:{headEmployee:{include:{user:true}}}}):null;return unit?.headEmployee?.user?[unit.headEmployee.user.id]:[]}const code=step.actorType===WorkflowActorType.HR?'HR_OFFICER':step.actorType===WorkflowActorType.PMS_ADMIN?'PMS_ADMIN':null;if(step.actorType===WorkflowActorType.ROLE&&step.actorRoleId){const roles=await this.prisma.userRole.findMany({where:{roleId:step.actorRoleId,user:{employee:{organizationId}}}});return roles.map(r=>r.userId)}if(code){const roles=await this.prisma.userRole.findMany({where:{role:{code},user:{employee:{organizationId}}}});return roles.map(r=>r.userId)}return[]}
 }
