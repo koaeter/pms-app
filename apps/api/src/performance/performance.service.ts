@@ -6,6 +6,7 @@ import { CreateReviewTypeDto } from './dto/create-review-type.dto';
 import { CreateKpiDto } from './dto/create-kpi.dto';
 import { CreateCompetencyDto } from './dto/create-competency.dto';
 import { CreateRatingScaleDto } from './dto/create-rating-scale.dto';
+import { CreateReviewDto } from './dto/create-review.dto';
 
 @Injectable()
 export class PerformanceService {
@@ -67,6 +68,70 @@ export class PerformanceService {
     try {
       return await this.prisma.ratingScale.create({ data: { organizationId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null, items: { create: dto.items.map((item) => ({ value: item.value, label: item.label.trim(), description: item.description?.trim() || null, minScore: item.minScore, maxScore: item.maxScore })) } }, include: { items: { orderBy: { value: 'asc' } } } });
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Rating scale code or value already exists'); throw error; }
+  }
+
+  async listReviews(organizationId: string, employeeId?: string, cycleId?: string) {
+    return this.prisma.performanceReview.findMany({
+      where: { employee: { organizationId }, ...(employeeId ? { employeeId } : {}), ...(cycleId ? { performanceCycleId: cycleId } : {}) },
+      orderBy: { createdAt: 'desc' },
+      include: { employee: true, performanceCycle: { include: { program: true } }, reviewType: true, kpis: true, competencies: { include: { competency: true } }, scores: { orderBy: { calculatedAt: 'desc' }, take: 1 } },
+    });
+  }
+
+  async getReview(organizationId: string, reviewId: string) {
+    const review = await this.prisma.performanceReview.findFirst({
+      where: { id: reviewId, employee: { organizationId } },
+      include: { employee: true, performanceCycle: { include: { program: true } }, reviewType: true, kpis: { include: { kpi: true } }, competencies: { include: { competency: true } }, scores: { orderBy: { calculatedAt: 'desc' } }, evidence: true, workflowInstance: true },
+    });
+    if (!review) throw new NotFoundException('Performance review not found');
+    return review;
+  }
+
+  async createReview(organizationId: string, dto: CreateReviewDto) {
+    const [employee, cycle, reviewType] = await Promise.all([
+      this.prisma.employee.findFirst({ where: { id: dto.employeeId, organizationId, active: true } }),
+      this.prisma.performanceCycle.findFirst({ where: { id: dto.performanceCycleId, program: { organizationId }, status: { in: ['DRAFT', 'OPEN'] } }, include: { program: true } }),
+      this.prisma.performanceReviewType.findFirst({ where: { id: dto.reviewTypeId, active: true, program: { organizationId } } }),
+    ]);
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (!cycle) throw new NotFoundException('Performance cycle not found or is not available');
+    if (!reviewType) throw new NotFoundException('Performance review type not found');
+    if (cycle.programId !== reviewType.programId) throw new ConflictException('Review type and cycle must belong to the same program');
+
+    const assignment = await this.prisma.employeeOrganizationalUnit.findFirst({ where: { employeeId: employee.id, isPrimary: true, endDate: null }, include: { organizationalUnit: true, designation: true, supervisor: true } });
+    const kpiIds = dto.kpis?.map((item) => item.kpiId) ?? [];
+    const competencyIds = dto.competencies?.map((item) => item.competencyId) ?? [];
+    if (new Set(kpiIds).size !== kpiIds.length) throw new ConflictException('A KPI cannot be assigned more than once to a review');
+    if (new Set(competencyIds).size !== competencyIds.length) throw new ConflictException('A competency cannot be assigned more than once to a review');
+    const [kpis, competencies] = await Promise.all([
+      this.prisma.kpi.findMany({ where: { id: { in: kpiIds }, organizationId, active: true } }),
+      this.prisma.competency.findMany({ where: { id: { in: competencyIds }, organizationId, active: true } }),
+    ]);
+    if (kpis.length !== kpiIds.length) throw new NotFoundException('One or more KPIs were not found in the employee organization');
+    if (competencies.length !== competencyIds.length) throw new NotFoundException('One or more competencies were not found in the employee organization');
+
+    try {
+      return await this.prisma.performanceReview.create({
+        data: {
+          employeeId: employee.id,
+          performanceCycleId: cycle.id,
+          reviewTypeId: reviewType.id,
+          organizationUnitIdSnapshot: assignment?.organizationalUnitId ?? null,
+          designationIdSnapshot: assignment?.designationId ?? employee.designationId ?? null,
+          supervisorEmployeeIdSnapshot: assignment?.supervisorEmployeeId ?? null,
+          organizationUnitNameSnapshot: assignment?.organizationalUnit.name ?? null,
+          designationNameSnapshot: assignment?.designation?.name ?? null,
+          supervisorNameSnapshot: assignment?.supervisor ? `${assignment.supervisor.firstName} ${assignment.supervisor.lastName}` : null,
+          startedAt: new Date(),
+          kpis: { create: (dto.kpis ?? []).map((item) => { const kpi = kpis.find((entry) => entry.id === item.kpiId)!; return { kpiId: kpi.id, employeeId: employee.id, title: item.title?.trim() || kpi.name, description: item.description?.trim() || kpi.description, target: item.target?.trim() || null, measurementUnit: item.measurementUnit?.trim() || kpi.defaultUnit, weight: item.weight }; }) },
+          competencies: { create: (dto.competencies ?? []).map((item) => ({ competencyId: item.competencyId, weight: item.weight })) },
+        },
+        include: { employee: true, performanceCycle: true, reviewType: true, kpis: { include: { kpi: true } }, competencies: { include: { competency: true } } },
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') throw new ConflictException('A review already exists for this employee, cycle and review type');
+      throw error;
+    }
   }
 
   private async requireProgram(organizationId: string, programId: string) {
