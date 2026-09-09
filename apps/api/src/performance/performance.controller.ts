@@ -10,43 +10,34 @@ import { CreateKpiDto } from './dto/create-kpi.dto';
 import { CreateCompetencyDto } from './dto/create-competency.dto';
 import { CreateRatingScaleDto } from './dto/create-rating-scale.dto';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { UpdateKpiScoreDto } from './dto/update-kpi-score.dto';
+import { UpdateCompetencyRatingDto } from './dto/update-competency-rating.dto';
+import { CalculateScoreDto } from './dto/calculate-score.dto';
 
 @Controller('performance')
 @UseGuards(SessionGuard)
 export class PerformanceController {
   constructor(private readonly performance: PerformanceService) {}
 
-  @Get('programs')
-  listPrograms(@CurrentUser() user: AuthRequest['user']) { return this.performance.listPrograms(user.employee.organizationId); }
-  @Post('programs')
-  createProgram(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateProgramDto) { return this.performance.createProgram(user.employee.organizationId, dto); }
-  @Get('programs/:programId/cycles')
-  listCycles(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string) { return this.performance.listCycles(user.employee.organizationId, programId); }
-  @Post('programs/:programId/cycles')
-  createCycle(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string, @Body() dto: CreateCycleDto) { return this.performance.createCycle(user.employee.organizationId, programId, dto); }
-  @Get('programs/:programId/review-types')
-  listReviewTypes(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string) { return this.performance.listReviewTypes(user.employee.organizationId, programId); }
-  @Post('programs/:programId/review-types')
-  createReviewType(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string, @Body() dto: CreateReviewTypeDto) { return this.performance.createReviewType(user.employee.organizationId, programId, dto); }
-  @Get('kpis')
-  listKpis(@CurrentUser() user: AuthRequest['user']) { return this.performance.listKpis(user.employee.organizationId); }
-  @Post('kpis')
-  createKpi(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateKpiDto) { return this.performance.createKpi(user.employee.organizationId, dto); }
-  @Get('competencies')
-  listCompetencies(@CurrentUser() user: AuthRequest['user']) { return this.performance.listCompetencies(user.employee.organizationId); }
-  @Post('competencies')
-  createCompetency(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateCompetencyDto) { return this.performance.createCompetency(user.employee.organizationId, dto); }
-  @Get('rating-scales')
-  listRatingScales(@CurrentUser() user: AuthRequest['user']) { return this.performance.listRatingScales(user.employee.organizationId); }
-  @Post('rating-scales')
-  createRatingScale(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateRatingScaleDto) { return this.performance.createRatingScale(user.employee.organizationId, dto); }
+  @Get('programs') listPrograms(@CurrentUser() user: AuthRequest['user']) { return this.performance.listPrograms(user.employee.organizationId); }
+  @Post('programs') createProgram(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateProgramDto) { return this.performance.createProgram(user.employee.organizationId, dto); }
+  @Get('programs/:programId/cycles') listCycles(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string) { return this.performance.listCycles(user.employee.organizationId, programId); }
+  @Post('programs/:programId/cycles') createCycle(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string, @Body() dto: CreateCycleDto) { return this.performance.createCycle(user.employee.organizationId, programId, dto); }
+  @Get('programs/:programId/review-types') listReviewTypes(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string) { return this.performance.listReviewTypes(user.employee.organizationId, programId); }
+  @Post('programs/:programId/review-types') createReviewType(@CurrentUser() user: AuthRequest['user'], @Param('programId') programId: string, @Body() dto: CreateReviewTypeDto) { return this.performance.createReviewType(user.employee.organizationId, programId, dto); }
+  @Get('kpis') listKpis(@CurrentUser() user: AuthRequest['user']) { return this.performance.listKpis(user.employee.organizationId); }
+  @Post('kpis') createKpi(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateKpiDto) { return this.performance.createKpi(user.employee.organizationId, dto); }
+  @Get('competencies') listCompetencies(@CurrentUser() user: AuthRequest['user']) { return this.performance.listCompetencies(user.employee.organizationId); }
+  @Post('competencies') createCompetency(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateCompetencyDto) { return this.performance.createCompetency(user.employee.organizationId, dto); }
+  @Get('rating-scales') listRatingScales(@CurrentUser() user: AuthRequest['user']) { return this.performance.listRatingScales(user.employee.organizationId); }
+  @Post('rating-scales') createRatingScale(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateRatingScaleDto) { return this.performance.createRatingScale(user.employee.organizationId, dto); }
+  @Get('reviews') listReviews(@CurrentUser() user: AuthRequest['user'], @Query('employeeId') employeeId?: string, @Query('cycleId') cycleId?: string) { return this.performance.listReviews(user.employee.organizationId, employeeId, cycleId); }
+  @Get('reviews/:reviewId') getReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string) { return this.performance.getReview(user.employee.organizationId, reviewId); }
+  @Post('reviews') createReview(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateReviewDto) { return this.performance.createReview(user.employee.organizationId, dto); }
 
-  @Get('reviews')
-  listReviews(@CurrentUser() user: AuthRequest['user'], @Query('employeeId') employeeId?: string, @Query('cycleId') cycleId?: string) { return this.performance.listReviews(user.employee.organizationId, employeeId, cycleId); }
-
-  @Get('reviews/:reviewId')
-  getReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string) { return this.performance.getReview(user.employee.organizationId, reviewId); }
-
-  @Post('reviews')
-  createReview(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateReviewDto) { return this.performance.createReview(user.employee.organizationId, dto); }
+  @Post('reviews/:reviewId/kpis/:kpiId/employee-score') scoreKpiAsEmployee(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Param('kpiId') kpiId: string, @Body() dto: UpdateKpiScoreDto) { return this.performance.scoreKpi(user.employee.organizationId, reviewId, kpiId, dto, 'employee'); }
+  @Post('reviews/:reviewId/kpis/:kpiId/supervisor-score') scoreKpiAsSupervisor(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Param('kpiId') kpiId: string, @Body() dto: UpdateKpiScoreDto) { return this.performance.scoreKpi(user.employee.organizationId, reviewId, kpiId, dto, 'supervisor'); }
+  @Post('reviews/:reviewId/competencies/:competencyId/employee-rating') rateCompetencyAsEmployee(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Param('competencyId') competencyId: string, @Body() dto: UpdateCompetencyRatingDto) { return this.performance.rateCompetency(user.employee.organizationId, reviewId, competencyId, dto, 'employee'); }
+  @Post('reviews/:reviewId/competencies/:competencyId/supervisor-rating') rateCompetencyAsSupervisor(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Param('competencyId') competencyId: string, @Body() dto: UpdateCompetencyRatingDto) { return this.performance.rateCompetency(user.employee.organizationId, reviewId, competencyId, dto, 'supervisor'); }
+  @Post('reviews/:reviewId/calculate-score') calculateScore(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: CalculateScoreDto) { return this.performance.calculateScore(user.employee.organizationId, reviewId, dto); }
 }
