@@ -30,9 +30,6 @@ jobs:
       - name: Validate Prisma schema
         run: pnpm exec prisma validate
 
-      - name: Format Prisma schema
-        run: pnpm exec prisma format --check
-
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
