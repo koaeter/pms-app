@@ -20,6 +20,9 @@ export class SessionGuard implements CanActivate {
       include: {
         user: {
           include: {
+            employee: {
+              select: { id: true, organizationId: true, employeeNumber: true, firstName: true, lastName: true },
+            },
             roles: {
               where: { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
               include: { role: { include: { permissions: { include: { permission: true } } } } },
@@ -40,6 +43,7 @@ export class SessionGuard implements CanActivate {
       employeeId: session.user.employeeId,
       username: session.user.username,
       accountStatus: session.user.accountStatus,
+      employee: session.user.employee,
       roles: session.user.roles.map((ur) => ({
         id: ur.role.id,
         code: ur.role.code,
