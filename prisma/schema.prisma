@@ -175,7 +175,7 @@ model OrganizationalUnitType {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   units        OrganizationalUnit[]
 
   @@unique([organizationId, code])
@@ -201,9 +201,9 @@ model OrganizationalUnit {
   unitType     OrganizationalUnitType? @relation(fields: [unitTypeId], references: [id], onDelete: SetNull)
   headEmployee Employee?               @relation("UnitHead", fields: [headEmployeeId], references: [id], onDelete: SetNull)
 
-  assignments  EmployeeOrganizationalUnit[]
-  roles        Role[]
-  reviews      PerformanceReview[] @relation("ReviewOrgUnitSnapshot")
+  assignments EmployeeOrganizationalUnit[]
+  roles       Role[]
+  reviews     PerformanceReview[] @relation("ReviewOrgUnitSnapshot")
 
   @@unique([organizationId, code])
   @@index([organizationId, parentId])
@@ -223,9 +223,9 @@ model Designation {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   employees    Employee[]
-  assignments EmployeeOrganizationalUnit[]
+  assignments  EmployeeOrganizationalUnit[]
   reviews      PerformanceReview[] @relation("ReviewDesignationSnapshot")
 
   @@unique([organizationId, code])
@@ -253,13 +253,13 @@ model Employee {
   designation  Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
   user         User?
 
-  assignments        EmployeeOrganizationalUnit[]
-  reportsTo          ReportingRelationship[] @relation("EmployeeReportsTo")
-  directReports      ReportingRelationship[] @relation("EmployeeDirectReports")
-  unitHeads          OrganizationalUnit[] @relation("UnitHead")
-  reviews            PerformanceReview[]
-  performanceKpis    PerformanceKpi[] @relation("KpiEmployee")
-  workflowReviews    PerformanceReview[] @relation("ReviewEmployee")
+  assignments       EmployeeOrganizationalUnit[]
+  reportsTo         ReportingRelationship[] @relation("EmployeeReportsTo")
+  directReports     ReportingRelationship[] @relation("EmployeeDirectReports")
+  unitHeads         OrganizationalUnit[] @relation("UnitHead")
+  reviews           PerformanceReview[] @relation("ReviewEmployee")
+  performanceKpis   PerformanceKpi[] @relation("KpiEmployee")
+  supervisedAssignments EmployeeOrganizationalUnit[] @relation("AssignmentSupervisor")
 
   @@unique([organizationId, employeeNumber])
   @@index([organizationId, active])
@@ -268,20 +268,21 @@ model Employee {
 }
 
 model EmployeeOrganizationalUnit {
-  id                 String   @id @default(uuid()) @db.Uuid
-  employeeId         String   @db.Uuid
-  organizationalUnitId String @db.Uuid
-  designationId      String?  @db.Uuid
-  supervisorEmployeeId String? @db.Uuid
-  isPrimary          Boolean  @default(true)
-  startDate          DateTime
-  endDate            DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                   String   @id @default(uuid()) @db.Uuid
+  employeeId           String   @db.Uuid
+  organizationalUnitId String   @db.Uuid
+  designationId        String?  @db.Uuid
+  supervisorEmployeeId String?  @db.Uuid
+  isPrimary            Boolean  @default(true)
+  startDate            DateTime
+  endDate              DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  employee       Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee           Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   organizationalUnit OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Restrict)
-  designation    Designation?       @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  designation        Designation?       @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  supervisor         Employee?          @relation("AssignmentSupervisor", fields: [supervisorEmployeeId], references: [id], onDelete: Restrict)
 
   @@index([employeeId, isPrimary])
   @@index([organizationalUnitId, startDate, endDate])
@@ -289,14 +290,14 @@ model EmployeeOrganizationalUnit {
 }
 
 model ReportingRelationship {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  employeeId            String                    @db.Uuid
-  reportsToEmployeeId   String                    @db.Uuid
-  relationshipType      ReportingRelationshipType @default(DIRECT)
-  startDate             DateTime
-  endDate               DateTime?
-  active                Boolean                   @default(true)
-  createdAt             DateTime                  @default(now())
+  id                  String                    @id @default(uuid()) @db.Uuid
+  employeeId          String                    @db.Uuid
+  reportsToEmployeeId String                    @db.Uuid
+  relationshipType    ReportingRelationshipType @default(DIRECT)
+  startDate           DateTime
+  endDate             DateTime?
+  active              Boolean                   @default(true)
+  createdAt           DateTime                  @default(now())
 
   employee          Employee @relation("EmployeeReportsTo", fields: [employeeId], references: [id], onDelete: Cascade)
   reportsToEmployee Employee @relation("EmployeeDirectReports", fields: [reportsToEmployeeId], references: [id], onDelete: Restrict)
@@ -306,45 +307,45 @@ model ReportingRelationship {
 }
 
 model User {
-  id                 String        @id @default(uuid()) @db.Uuid
-  employeeId         String        @unique @db.Uuid
-  username           String        @unique
-  passwordHash       String
-  accountStatus      AccountStatus @default(PENDING)
-  emailVerified      Boolean       @default(false)
-  mfaEnabled         Boolean       @default(false)
-  lastLoginAt        DateTime?
-  passwordChangedAt  DateTime?
-  failedLoginCount   Int           @default(0)
-  lockedUntil        DateTime?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                   String        @id @default(uuid()) @db.Uuid
+  employeeId           String        @unique @db.Uuid
+  username             String        @unique
+  passwordHash         String
+  accountStatus        AccountStatus @default(PENDING)
+  emailVerified        Boolean       @default(false)
+  mfaEnabled           Boolean       @default(false)
+  lastLoginAt          DateTime?
+  passwordChangedAt    DateTime?
+  failedLoginCount     Int           @default(0)
+  lockedUntil          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  employee            Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  roles               UserRole[]
-  sessions            Session[]
+  employee             Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roles                UserRole[]
+  sessions             Session[]
   authenticationEvents AuthenticationEvent[]
-  notifications       Notification[]
-  auditLogs           AuditLog[]
-  workflowActions     WorkflowAction[]
-  delegationsGiven    Delegation[] @relation("DelegationsGiven")
-  delegationsReceived Delegation[] @relation("DelegationsReceived")
-  systemSettings      SystemSetting[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  workflowActions      WorkflowAction[]
+  delegationsGiven     Delegation[] @relation("DelegationsGiven")
+  delegationsReceived  Delegation[] @relation("DelegationsReceived")
+  systemSettings       SystemSetting[]
 
   @@index([accountStatus])
 }
 
 model Session {
-  id               String   @id @default(uuid()) @db.Uuid
-  userId           String   @db.Uuid
-  tokenHash        String   @unique
-  ipAddress        String?
-  userAgent        String?
-  deviceInfo       String?
-  createdAt        DateTime @default(now())
-  lastActivityAt   DateTime @default(now())
-  expiresAt        DateTime
-  revokedAt        DateTime?
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  tokenHash      String   @unique
+  ipAddress      String?
+  userAgent      String?
+  deviceInfo     String?
+  createdAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -370,22 +371,22 @@ model AuthenticationEvent {
 }
 
 model Role {
-  id             String   @id @default(uuid()) @db.Uuid
-  organizationId String?  @db.Uuid
-  organizationalUnitId String? @db.Uuid
-  name           String
-  code           String
-  description    String?
-  systemRole     Boolean  @default(false)
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                   String   @id @default(uuid()) @db.Uuid
+  organizationId       String?  @db.Uuid
+  organizationalUnitId String?  @db.Uuid
+  name                 String
+  code                 String
+  description          String?
+  systemRole           Boolean  @default(false)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  organization      Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization       Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationalUnit OrganizationalUnit? @relation(fields: [organizationalUnitId], references: [id], onDelete: SetNull)
-  userRoles         UserRole[]
-  permissions       RolePermission[]
-  workflowSteps     WorkflowStep[]
+  userRoles          UserRole[]
+  permissions        RolePermission[]
+  workflowSteps      WorkflowStep[]
 
   @@unique([organizationId, code])
   @@index([organizationalUnitId])
@@ -452,17 +453,17 @@ model PerformanceProgram {
 }
 
 model PerformanceCycle {
-  id          String                @id @default(uuid()) @db.Uuid
-  programId   String                @db.Uuid
+  id          String                 @id @default(uuid()) @db.Uuid
+  programId   String                 @db.Uuid
   name        String
   code        String
   year        Int?
   startDate   DateTime
   endDate     DateTime
   status      PerformanceCycleStatus @default(DRAFT)
-  createdBy   String?               @db.Uuid
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  createdBy   String?                @db.Uuid
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 
   program PerformanceProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
   reviews PerformanceReview[]
@@ -482,8 +483,8 @@ model PerformanceReviewType {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  program PerformanceProgram? @relation(fields: [programId], references: [id], onDelete: Cascade)
-  reviews PerformanceReview[]
+  program   PerformanceProgram? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  reviews   PerformanceReview[]
   workflows Workflow[]
 
   @@unique([programId, code])
@@ -491,32 +492,33 @@ model PerformanceReviewType {
 }
 
 model PerformanceReview {
-  id                   String                  @id @default(uuid()) @db.Uuid
-  employeeId           String                  @db.Uuid
-  performanceCycleId   String                  @db.Uuid
-  reviewTypeId         String                  @db.Uuid
-  status               PerformanceReviewStatus @default(DRAFT)
+  id                          String                  @id @default(uuid()) @db.Uuid
+  employeeId                  String                  @db.Uuid
+  performanceCycleId         String                  @db.Uuid
+  reviewTypeId                String                  @db.Uuid
+  status                      PerformanceReviewStatus @default(DRAFT)
+  organizationUnitIdSnapshot  String?                 @db.Uuid
+  designationIdSnapshot       String?                 @db.Uuid
+  supervisorEmployeeIdSnapshot String?                @db.Uuid
+  organizationUnitNameSnapshot String?
+  designationNameSnapshot     String?
+  supervisorNameSnapshot      String?
+  startedAt                   DateTime?
+  submittedAt                DateTime?
+  completedAt                DateTime?
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
 
-  organizationUnitIdSnapshot String? @db.Uuid
-  designationIdSnapshot      String? @db.Uuid
-  supervisorEmployeeIdSnapshot String? @db.Uuid
-
-  startedAt            DateTime?
-  submittedAt          DateTime?
-  completedAt          DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-
-  employee         Employee             @relation("ReviewEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
-  performanceCycle PerformanceCycle     @relation(fields: [performanceCycleId], references: [id], onDelete: Restrict)
+  employee         Employee              @relation("ReviewEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  performanceCycle PerformanceCycle      @relation(fields: [performanceCycleId], references: [id], onDelete: Restrict)
   reviewType       PerformanceReviewType @relation(fields: [reviewTypeId], references: [id], onDelete: Restrict)
-  organizationUnit OrganizationalUnit?  @relation("ReviewOrgUnitSnapshot", fields: [organizationUnitIdSnapshot], references: [id], onDelete: SetNull)
-  designation      Designation?         @relation("ReviewDesignationSnapshot", fields: [designationIdSnapshot], references: [id], onDelete: SetNull)
+  organizationUnit OrganizationalUnit?   @relation("ReviewOrgUnitSnapshot", fields: [organizationUnitIdSnapshot], references: [id], onDelete: SetNull)
+  designation      Designation?          @relation("ReviewDesignationSnapshot", fields: [designationIdSnapshot], references: [id], onDelete: SetNull)
 
-  kpis            PerformanceKpi[]
-  competencies    PerformanceCompetency[]
-  scores          PerformanceScore[]
-  evidence        Evidence[]
+  kpis             PerformanceKpi[]
+  competencies     PerformanceCompetency[]
+  scores           PerformanceScore[]
+  evidence         Evidence[]
   workflowInstance WorkflowInstance?
 
   @@unique([employeeId, performanceCycleId, reviewTypeId])
@@ -526,16 +528,16 @@ model PerformanceReview {
 }
 
 model Kpi {
-  id                 String   @id @default(uuid()) @db.Uuid
-  organizationId     String   @db.Uuid
-  name               String
-  code               String
-  description        String?
-  measurementMethod  String?
-  defaultUnit        String?
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @db.Uuid
+  name              String
+  code              String
+  description       String?
+  measurementMethod String?
+  defaultUnit       String?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   assignments  PerformanceKpi[]
@@ -604,6 +606,7 @@ model PerformanceCompetency {
 
   performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
   competency       Competency?       @relation(fields: [competencyId], references: [id], onDelete: SetNull)
+  evidence         Evidence[]
 
   @@index([performanceReviewId])
   @@index([competencyId])
@@ -627,9 +630,9 @@ model RatingScale {
 }
 
 model RatingScaleItem {
-  id           String   @id @default(uuid()) @db.Uuid
-  ratingScaleId String  @db.Uuid
-  value        Decimal  @db.Decimal(8, 4)
+  id           String  @id @default(uuid()) @db.Uuid
+  ratingScaleId String @db.Uuid
+  value        Decimal @db.Decimal(8, 4)
   label        String
   description  String?
   minScore     Decimal? @db.Decimal(8, 4)
@@ -647,8 +650,8 @@ model PerformanceScore {
   kpiScore            Decimal? @db.Decimal(8, 4)
   competencyScore     Decimal? @db.Decimal(8, 4)
   overallScore        Decimal? @db.Decimal(8, 4)
-  overallRating      String?
-  calculationVersion String   @default("1.0")
+  overallRating       String?
+  calculationVersion  String   @default("1.0")
   calculatedAt        DateTime @default(now())
 
   performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
@@ -658,21 +661,22 @@ model PerformanceScore {
 }
 
 model Evidence {
-  id                   String   @id @default(uuid()) @db.Uuid
-  performanceReviewId  String   @db.Uuid
-  performanceKpiId     String?  @db.Uuid
+  id                     String   @id @default(uuid()) @db.Uuid
+  performanceReviewId    String   @db.Uuid
+  performanceKpiId       String?  @db.Uuid
   performanceCompetencyId String? @db.Uuid
-  uploadedBy           String   @db.Uuid
-  fileName             String
-  storageKey           String
-  mimeType             String?
-  fileSize             BigInt?
-  checksum             String?
-  description          String?
-  createdAt            DateTime @default(now())
+  uploadedBy             String   @db.Uuid
+  fileName               String
+  storageKey             String
+  mimeType               String?
+  fileSize               BigInt?
+  checksum               String?
+  description            String?
+  createdAt              DateTime @default(now())
 
-  performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
-  performanceKpi    PerformanceKpi?  @relation(fields: [performanceKpiId], references: [id], onDelete: Cascade)
+  performanceReview PerformanceReview     @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
+  performanceKpi    PerformanceKpi?       @relation(fields: [performanceKpiId], references: [id], onDelete: Cascade)
+  performanceCompetency PerformanceCompetency? @relation(fields: [performanceCompetencyId], references: [id], onDelete: Cascade)
 
   @@index([performanceReviewId])
   @@index([performanceKpiId])
@@ -680,47 +684,49 @@ model Evidence {
 }
 
 model Workflow {
-  id                   String   @id @default(uuid()) @db.Uuid
-  organizationId       String   @db.Uuid
+  id                     String   @id @default(uuid()) @db.Uuid
+  organizationId         String   @db.Uuid
   performanceReviewTypeId String? @db.Uuid
-  name                 String
-  code                 String
-  description          String?
-  active               Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  name                   String
+  code                   String
+  description            String?
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization         Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   performanceReviewType PerformanceReviewType? @relation(fields: [performanceReviewTypeId], references: [id], onDelete: SetNull)
-  steps              WorkflowStep[]
-  instances           WorkflowInstance[]
+  steps                WorkflowStep[]
+  instances             WorkflowInstance[]
 
   @@unique([organizationId, code])
   @@index([performanceReviewTypeId])
 }
 
 model WorkflowStep {
-  id             String            @id @default(uuid()) @db.Uuid
-  workflowId     String            @db.Uuid
-  stepOrder      Int
-  name           String
-  description    String?
-  actorType      WorkflowActorType
-  actorRoleId    String?           @db.Uuid
-  actorUserId    String?           @db.Uuid
-  required       Boolean           @default(true)
-  canReturn      Boolean           @default(true)
-  canReject      Boolean           @default(false)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id          String            @id @default(uuid()) @db.Uuid
+  workflowId  String            @db.Uuid
+  stepOrder   Int
+  name        String
+  description String?
+  actorType   WorkflowActorType
+  actorRoleId String?           @db.Uuid
+  actorUserId String?           @db.Uuid
+  required    Boolean           @default(true)
+  canReturn   Boolean           @default(true)
+  canReject   Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
-  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  actorRole Role?   @relation(fields: [actorRoleId], references: [id], onDelete: SetNull)
+  workflow  Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  actorRole Role?             @relation(fields: [actorRoleId], references: [id], onDelete: SetNull)
+  actorUser User?             @relation("WorkflowStepActor", fields: [actorUserId], references: [id], onDelete: SetNull)
   instances WorkflowInstance[]
   actions   WorkflowAction[]
 
   @@unique([workflowId, stepOrder])
   @@index([actorRoleId])
+  @@index([actorUserId])
 }
 
 model WorkflowInstance {
@@ -731,12 +737,12 @@ model WorkflowInstance {
   status              WorkflowStatus @default(PENDING)
   startedAt           DateTime?
   completedAt         DateTime?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
-  workflow          Workflow         @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  workflow          Workflow          @relation(fields: [workflowId], references: [id], onDelete: Restrict)
   performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
-  currentStep       WorkflowStep?    @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
+  currentStep       WorkflowStep?     @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
   actions           WorkflowAction[]
 
   @@index([workflowId, status])
@@ -744,13 +750,13 @@ model WorkflowInstance {
 }
 
 model WorkflowAction {
-  id                  String             @id @default(uuid()) @db.Uuid
-  workflowInstanceId  String             @db.Uuid
-  workflowStepId      String             @db.Uuid
-  performedBy         String             @db.Uuid
-  action              WorkflowActionType
-  comment             String?
-  createdAt           DateTime           @default(now())
+  id                 String             @id @default(uuid()) @db.Uuid
+  workflowInstanceId String             @db.Uuid
+  workflowStepId     String             @db.Uuid
+  performedBy        String             @db.Uuid
+  action             WorkflowActionType
+  comment            String?
+  createdAt          DateTime           @default(now())
 
   workflowInstance WorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
   workflowStep     WorkflowStep     @relation(fields: [workflowStepId], references: [id], onDelete: Restrict)
@@ -761,15 +767,15 @@ model WorkflowAction {
 }
 
 model Delegation {
-  id           String   @id @default(uuid()) @db.Uuid
-  delegatedBy  String   @db.Uuid
-  delegatedTo  String   @db.Uuid
-  workflowId   String?  @db.Uuid
-  startDate    DateTime
-  endDate      DateTime
-  reason       String?
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid()) @db.Uuid
+  delegatedBy String   @db.Uuid
+  delegatedTo String   @db.Uuid
+  workflowId  String?  @db.Uuid
+  startDate   DateTime
+  endDate     DateTime
+  reason      String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   delegator User @relation("DelegationsGiven", fields: [delegatedBy], references: [id], onDelete: Restrict)
   delegate  User @relation("DelegationsReceived", fields: [delegatedTo], references: [id], onDelete: Restrict)
@@ -837,12 +843,12 @@ model SystemSetting {
 }
 
 model SystemEvent {
-  id         String               @id @default(uuid()) @db.Uuid
+  id         String              @id @default(uuid()) @db.Uuid
   eventType  String
-  severity   SystemEventSeverity  @default(INFO)
+  severity   SystemEventSeverity @default(INFO)
   message    String
   metadata   Json?
-  createdAt  DateTime             @default(now())
+  createdAt  DateTime            @default(now())
 
   @@index([eventType, createdAt])
   @@index([severity, createdAt])
