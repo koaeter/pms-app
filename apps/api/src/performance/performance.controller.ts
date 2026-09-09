@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { WorkflowActionType } from '@prisma/client';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { AuthRequest } from '../auth/types/auth-request';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -51,9 +52,9 @@ export class PerformanceController {
   @Post('workflows') createWorkflow(@CurrentUser() user: AuthRequest['user'], @Body() dto: CreateWorkflowDto) { return this.workflows.createWorkflow(user.employee.organizationId, dto); }
   @Get('reviews/:reviewId/workflow') getReviewWorkflow(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string) { return this.workflows.getReviewWorkflow(user.employee.organizationId, reviewId); }
   @Post('reviews/:reviewId/submit') submitReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.submit(user.employee.organizationId, reviewId, user.id, dto); }
-  @Post('reviews/:reviewId/approve') approveReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, 'APPROVE' as never, dto); }
-  @Post('reviews/:reviewId/return') returnReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, 'RETURN' as never, dto); }
-  @Post('reviews/:reviewId/reject') rejectReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, 'REJECT' as never, dto); }
-  @Post('reviews/:reviewId/delegate') delegateReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, 'DELEGATE' as never, dto); }
-  @Post('reviews/:reviewId/cancel') cancelReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, 'CANCEL' as never, dto); }
+  @Post('reviews/:reviewId/approve') approveReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, WorkflowActionType.APPROVE, dto); }
+  @Post('reviews/:reviewId/return') returnReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, WorkflowActionType.RETURN, dto); }
+  @Post('reviews/:reviewId/reject') rejectReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, WorkflowActionType.REJECT, dto); }
+  @Post('reviews/:reviewId/delegate') delegateReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, WorkflowActionType.DELEGATE, dto); }
+  @Post('reviews/:reviewId/cancel') cancelReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: WorkflowActionDto) { return this.workflows.act(user.employee.organizationId, reviewId, user.id, WorkflowActionType.CANCEL, dto); }
 }
