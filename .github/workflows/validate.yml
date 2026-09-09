@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  DATABASE_URL: postgresql://pms:pms@localhost:5432/pms_ci
+
 jobs:
   validate:
     runs-on: ubuntu-latest
