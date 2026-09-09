@@ -6,12 +6,13 @@ import { useParams, useRouter } from 'next/navigation';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 type Review = { id: string; status: string; employee: { id: string; firstName: string; lastName: string; employeeNumber: string }; performanceCycle: { name: string; program: { name: string } }; reviewType: { name: string }; kpis: Array<{ id: string; title: string; target: string | null; measurementUnit: string | null; weight: number; employeeScore: number | null; supervisorScore: number | null; employeeComment: string | null; supervisorComment: string | null }>; competencies: Array<{ id: string; competency: { name: string }; weight: number; employeeRating: number | null; supervisorRating: number | null; employeeComment: string | null; supervisorComment: string | null }>; scores: Array<{ overallScore: number | null; overallRating: string | null; calculatedAt: string }> };
 type Me = { employee: { id: string }; roles: Array<{ code: string }> };
+type Workflow = { status: string; currentStep: { name: string; actorType: string } | null; actions: Array<{ action: string; comment: string | null; createdAt: string; user: { employee: { firstName: string; lastName: string } } }> } | null;
 
 const terminalStatuses = ['FINALIZED', 'LOCKED', 'CANCELLED'];
 
 export default function ReviewDetailPage() {
   const params = useParams<{ reviewId: string }>(); const router = useRouter();
-  const [review, setReview] = useState<Review | null>(null); const [canEdit, setCanEdit] = useState(false); const [canSupervise, setCanSupervise] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [saving, setSaving] = useState<string | null>(null);
+  const [review, setReview] = useState<Review | null>(null); const [workflow, setWorkflow] = useState<Workflow>(null); const [canEdit, setCanEdit] = useState(false); const [canSupervise, setCanSupervise] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [saving, setSaving] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -19,16 +20,17 @@ export default function ReviewDetailPage() {
       if (meResponse.status === 401) { router.replace('/login'); return; }
       if (!meResponse.ok) throw new Error('Unable to identify current user');
       const me: { user: Me } = await meResponse.json();
-      const [mineResponse, teamResponse] = await Promise.all([
+      const [mineResponse, teamResponse, workflowResponse] = await Promise.all([
         fetch(`${API}/performance/reviews/mine`, { credentials: 'include' }),
         fetch(`${API}/performance/reviews/team`, { credentials: 'include' }),
+        fetch(`${API}/performance/reviews/${params.reviewId}/workflow`, { credentials: 'include' }),
       ]);
       const mine: Review[] = mineResponse.ok ? await mineResponse.json() : [];
       const team: Review[] = teamResponse.ok ? await teamResponse.json() : [];
       const found = [...mine, ...team].find(item => item.id === params.reviewId) ?? null;
       if (!found) throw new Error('You do not have access to this review');
       const supervisorRole = me.user.roles.some(role => ['SUPERVISOR', 'HOD', 'SUPER_ADMIN'].includes(role.code));
-      setReview(found); setCanEdit(found.employee.id === me.user.employee.id); setCanSupervise(supervisorRole && found.employee.id !== me.user.employee.id);
+      setReview(found); setWorkflow(workflowResponse.ok ? await workflowResponse.json() : null); setCanEdit(found.employee.id === me.user.employee.id); setCanSupervise(supervisorRole && found.employee.id !== me.user.employee.id);
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load review'); }
     finally { setLoading(false); }
   }
@@ -51,6 +53,7 @@ export default function ReviewDetailPage() {
   const latest = review.scores[0]; const editable = canEdit && ![...terminalStatuses, 'APPROVED'].includes(review.status); const supervisorEditable = canSupervise && !terminalStatuses.includes(review.status);
   const workflowReady = ['SUBMITTED', 'UNDER_REVIEW', 'RESUBMITTED'].includes(review.status);
   return <main className="app-shell"><aside className="sidebar"><div className="brand"><span>PMS</span><small>Performance Management</small></div><nav><a onClick={() => router.push('/')}>Overview</a><a className="active" onClick={() => router.push(canSupervise ? '/team-reviews' : '/reviews')}>{canSupervise ? 'Team Reviews' : 'My Reviews'}</a></nav></aside><section className="workspace"><header className="topbar"><div><p className="eyebrow">Performance review</p><h1>{review.performanceCycle.name}</h1></div><button className="back-button" onClick={() => router.push(canSupervise ? '/team-reviews' : '/reviews')}>Back to reviews</button></header><div className="content">{error && <p className="error">{error}</p>}<section className="review-summary"><div><p className="eyebrow">{review.performanceCycle.program.name} · {review.reviewType.name}</p><h2>{review.employee.firstName} {review.employee.lastName}</h2><p className="muted">Employee {review.employee.employeeNumber}</p></div><div className="review-score"><span className={`status status-${review.status.toLowerCase()}`}>{review.status.replaceAll('_', ' ')}</span><strong>{latest?.overallScore != null ? `${Number(latest.overallScore).toFixed(1)}%` : '—'}</strong><small>{latest?.overallRating ?? 'Overall score not calculated'}</small></div></section>
+    {workflow && <section className="panel review-section"><div className="panel-heading"><div><p className="eyebrow">Workflow</p><h3>{workflow.currentStep ? `Current step: ${workflow.currentStep.name}` : 'Workflow complete'}</h3></div><span className="status">{workflow.status.replaceAll('_', ' ')}</span></div>{workflow.currentStep && <p className="muted">Assigned actor: {workflow.currentStep.actorType.replaceAll('_', ' ')}</p>}<div className="workflow-timeline">{workflow.actions.map((action, index) => <div className="workflow-event" key={`${action.createdAt}-${index}`}><strong>{action.action.replaceAll('_', ' ')}</strong><span>{action.user.employee.firstName} {action.user.employee.lastName} · {new Date(action.createdAt).toLocaleString()}</span>{action.comment && <p>{action.comment}</p>}</div>)}</div></section>}
     {canSupervise && <section className="panel review-section"><div className="panel-heading"><div><p className="eyebrow">Supervisor review</p><h3>Review employee submission</h3></div><span className="muted">Employee scores remain read-only</span></div><p className="muted">Enter your independent assessment below. The supervisor score takes precedence when the overall performance score is calculated.</p></section>}
     <section className="panel review-section"><div className="panel-heading"><div><p className="eyebrow">Key performance indicators</p><h3>Goals and results</h3></div></div>{review.kpis.length === 0 ? <p className="muted">No KPIs are attached to this review.</p> : <div className="review-items">{review.kpis.map(k => <KpiEditor key={k.id} kpi={k} editable={editable} supervisorEditable={supervisorEditable} saving={saving === k.id} onSave={saveKpi} />)}</div>}</section>
     <section className="panel review-section"><div className="panel-heading"><div><p className="eyebrow">Competencies</p><h3>Behaviour and capability</h3></div></div>{review.competencies.length === 0 ? <p className="muted">No competencies are attached to this review.</p> : <div className="review-items">{review.competencies.map(c => <CompetencyEditor key={c.id} competency={c} editable={editable} supervisorEditable={supervisorEditable} saving={saving === c.id} onSave={saveCompetency} />)}</div>}</section>
