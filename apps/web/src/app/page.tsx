@@ -1,15 +1,68 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+
+type User = { username: string; employee: { firstName: string; lastName: string; employeeNumber: string } };
+type Role = { code: string; name: string; permissions: Array<{ code: string; scope: string }> };
+
 export default function HomePage() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/auth/me`, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('unauthenticated');
+        return response.json();
+      })
+      .then((data) => { setUser(data.user); setRoles(data.roles ?? []); })
+      .catch(() => router.replace('/login'))
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  async function logout() {
+    await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
+    router.replace('/login');
+  }
+
+  if (loading) return <main className="loading">Loading workspace…</main>;
+  if (!user) return null;
+
+  const codes = new Set(roles.map((role) => role.code));
+  const isIT = codes.has('IT_ADMIN') || codes.has('SUPER_ADMIN');
+  const isPmsAdmin = codes.has('PMS_ADMIN') || codes.has('SUPER_ADMIN');
+  const isSupervisor = codes.has('SUPERVISOR') || codes.has('HOD');
+
   return (
-    <main style={{ maxWidth: 1100, margin: '0 auto', padding: 48 }}>
-      <section style={{ background: '#fff', borderRadius: 16, padding: 40, boxShadow: '0 8px 30px rgba(0,0,0,.06)' }}>
-        <p style={{ margin: 0, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
-          Performance Management System
-        </p>
-        <h1 style={{ fontSize: 42, margin: '16px 0' }}>Performance, structured for the organization.</h1>
-        <p style={{ maxWidth: 720, lineHeight: 1.7 }}>
-          A configurable platform for KPIs, competencies, reviews, approvals, evidence,
-          organizational hierarchy, auditability and role-based access.
-        </p>
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand"><span>PMS</span><small>Performance Management</small></div>
+        <nav>
+          <a className="active">Overview</a>
+          <a>My Reviews</a>
+          {isSupervisor && <a>Team Reviews</a>}
+          {isPmsAdmin && <a>Performance Setup</a>}
+          {isIT && <a>IT Administration</a>}
+        </nav>
+        <button className="logout" onClick={logout}>Sign out</button>
+      </aside>
+
+      <section className="workspace">
+        <header className="topbar"><div><p className="eyebrow">Workspace</p><h1>Good to see you, {user.employee.firstName}</h1></div><div className="avatar">{user.employee.firstName[0]}{user.employee.lastName[0]}</div></header>
+        <div className="content">
+          <section className="hero-panel"><div><p className="eyebrow">Performance dashboard</p><h2>Keep performance moving forward.</h2><p>Track reviews, goals, feedback and approvals from one controlled workspace.</p></div><span className="status-pill">● Account active</span></section>
+          <div className="stat-grid">
+            <article><span>My reviews</span><strong>—</strong><small>Connects to review activity</small></article>
+            <article><span>Pending actions</span><strong>—</strong><small>Workflow items assigned to you</small></article>
+            <article><span>Current role</span><strong>{roles[0]?.name ?? 'Employee'}</strong><small>{user.employee.employeeNumber}</small></article>
+          </div>
+          <section className="panel"><div className="panel-heading"><div><p className="eyebrow">Quick access</p><h3>Your workspace</h3></div></div><div className="quick-grid"><button>Open my reviews <span>→</span></button>{isSupervisor && <button>Review my team <span>→</span></button>}{isPmsAdmin && <button>Manage performance setup <span>→</span></button>}{isIT && <button>Open IT administration <span>→</span></button>}</div></section>
+        </div>
       </section>
     </main>
   );
