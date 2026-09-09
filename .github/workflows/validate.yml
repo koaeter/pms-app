@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  prisma:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,5 +27,11 @@ jobs:
       - name: Validate Prisma schema
         run: pnpm exec prisma validate
 
-      - name: Format check
+      - name: Format Prisma schema
         run: pnpm exec prisma format --check
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Build API
+        run: pnpm --filter @pms/api build
