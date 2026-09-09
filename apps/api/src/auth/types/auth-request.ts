@@ -5,6 +5,13 @@ export interface AuthenticatedUser {
   employeeId: string;
   username: string;
   accountStatus: string;
+  employee: {
+    id: string;
+    organizationId: string;
+    employeeNumber: string;
+    firstName: string;
+    lastName: string;
+  };
   roles: Array<{
     id: string;
     code: string;
