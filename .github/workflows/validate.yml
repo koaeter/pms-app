@@ -35,3 +35,6 @@ jobs:
 
       - name: Build API
         run: pnpm --filter @pms/api build
+
+      - name: Run API tests
+        run: pnpm --filter @pms/api test
