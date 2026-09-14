@@ -75,7 +75,13 @@ describe('PerformanceService.calculateScore', () => {
 
   it('rejects finalized reviews', async () => {
     prisma.performanceReview.findFirst
-      .mockResolvedValueOnce({ id: 'review-1', employee: { organizationId: 'org-1' }, status: PerformanceReviewStatus.FINALIZED });
+      .mockResolvedValueOnce({ id: 'review-1', employee: { organizationId: 'org-1' }, status: PerformanceReviewStatus.FINALIZED })
+      .mockResolvedValueOnce({
+        id: 'review-1',
+        status: PerformanceReviewStatus.FINALIZED,
+        kpis: [{ weight: 60, employeeScore: 80, supervisorScore: 90 }],
+        competencies: [{ weight: 40, employeeRating: 70, supervisorRating: 80 }],
+      });
 
     await expect(service.calculateScore('org-1', 'review-1', {})).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.performanceScore.create).not.toHaveBeenCalled();
