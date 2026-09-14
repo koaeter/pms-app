@@ -350,7 +350,7 @@ model AuthenticationEvent {
 }
 
 model Role {
-  id String @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @default(uuid()) @db.Uuid
   organizationId String? @db.Uuid
   organizationalUnitId String? @db.Uuid
   name String
@@ -458,7 +458,7 @@ model PerformanceReviewType {
 }
 
 model PerformanceReview {
-  id String @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @default(uuid()) @db.Uuid
   employeeId String @db.Uuid
   performanceCycleId String @db.Uuid
   reviewTypeId String @db.Uuid
@@ -518,19 +518,14 @@ model PerformanceKpi {
   measurementUnit String?
   weight Decimal @db.Decimal(8,4)
   actualResult String?
-  employeeComment String?
-  supervisorComment String?
   employeeScore Decimal? @db.Decimal(8,4)
   supervisorScore Decimal? @db.Decimal(8,4)
-  status String @default("PENDING")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
+  review PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
   kpi Kpi? @relation(fields: [kpiId], references: [id], onDelete: SetNull)
   employee Employee @relation("KpiEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
-  evidence Evidence[]
   @@index([performanceReviewId])
-  @@index([kpiId])
   @@index([employeeId])
 }
 
@@ -553,18 +548,19 @@ model PerformanceCompetency {
   id String @id @default(uuid()) @db.Uuid
   performanceReviewId String @db.Uuid
   competencyId String? @db.Uuid
+  employeeId String @db.Uuid
+  title String
+  description String?
   weight Decimal @db.Decimal(8,4)
   employeeRating Decimal? @db.Decimal(8,4)
   supervisorRating Decimal? @db.Decimal(8,4)
-  employeeComment String?
-  supervisorComment String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
+  review PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
   competency Competency? @relation(fields: [competencyId], references: [id], onDelete: SetNull)
-  evidence Evidence[]
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   @@index([performanceReviewId])
-  @@index([competencyId])
+  @@index([employeeId])
 }
 
 model RatingScale {
@@ -573,40 +569,39 @@ model RatingScale {
   name String
   code String
   description String?
+  minValue Decimal @db.Decimal(8,4)
+  maxValue Decimal @db.Decimal(8,4)
   active Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  items RatingScaleItem[]
-  scores PerformanceScore[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  levels RatingScaleLevel[]
   @@unique([organizationId, code])
+  @@index([organizationId, active])
 }
 
-model RatingScaleItem {
+model RatingScaleLevel {
   id String @id @default(uuid()) @db.Uuid
   ratingScaleId String @db.Uuid
   value Decimal @db.Decimal(8,4)
   label String
   description String?
-  minScore Decimal? @db.Decimal(8,4)
-  maxScore Decimal? @db.Decimal(8,4)
+  createdAt DateTime @default(now())
   ratingScale RatingScale @relation(fields: [ratingScaleId], references: [id], onDelete: Cascade)
   @@unique([ratingScaleId, value])
+  @@index([ratingScaleId])
 }
 
 model PerformanceScore {
   id String @id @default(uuid()) @db.Uuid
   performanceReviewId String @db.Uuid
-  ratingScaleId String? @db.Uuid
-  kpiScore Decimal? @db.Decimal(8,4)
-  competencyScore Decimal? @db.Decimal(8,4)
-  overallScore Decimal? @db.Decimal(8,4)
-  overallRating String?
-  calculationVersion String @default("1.0")
+  calculatedBy String? @db.Uuid
+  overallScore Decimal? @db.Decimal(10,4)
+  details Json?
   calculatedAt DateTime @default(now())
-  performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
-  ratingScale RatingScale? @relation(fields: [ratingScaleId], references: [id], onDelete: SetNull)
-  @@index([performanceReviewId])
+  review PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
+  calculator User? @relation(fields: [calculatedBy], references: [id], onDelete: SetNull)
+  @@index([performanceReviewId, calculatedAt])
 }
 
 model Evidence {
@@ -614,17 +609,16 @@ model Evidence {
   performanceReviewId String @db.Uuid
   performanceKpiId String? @db.Uuid
   performanceCompetencyId String? @db.Uuid
-  uploadedBy String @db.Uuid
   fileName String
   storageKey String
-  mimeType String?
-  fileSize BigInt?
-  checksum String?
-  description String?
+  mimeType String
+  sizeBytes Int
+  uploadedBy String @db.Uuid
   createdAt DateTime @default(now())
-  performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
-  performanceKpi PerformanceKpi? @relation(fields: [performanceKpiId], references: [id], onDelete: Cascade)
-  performanceCompetency PerformanceCompetency? @relation(fields: [performanceCompetencyId], references: [id], onDelete: Cascade)
+  review PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
+  kpi PerformanceKpi? @relation(fields: [performanceKpiId], references: [id], onDelete: Cascade)
+  competency PerformanceCompetency? @relation(fields: [performanceCompetencyId], references: [id], onDelete: Cascade)
+  uploader User @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
   @@index([performanceReviewId])
   @@index([performanceKpiId])
   @@index([performanceCompetencyId])
@@ -640,11 +634,12 @@ model Workflow {
   active Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  performanceReviewType PerformanceReviewType? @relation(fields: [performanceReviewTypeId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  performanceReviewType PerformanceReviewType? @relation(fields: [performanceReviewTypeId], references: [id], onDelete: Cascade)
   steps WorkflowStep[]
   instances WorkflowInstance[]
   @@unique([organizationId, code])
+  @@index([organizationId, active])
   @@index([performanceReviewTypeId])
 }
 
@@ -686,6 +681,7 @@ model WorkflowInstance {
   performanceReview PerformanceReview @relation(fields: [performanceReviewId], references: [id], onDelete: Cascade)
   currentStep WorkflowStep? @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
   actions WorkflowAction[]
+  delegations Delegation[] @relation("WorkflowDelegations")
   @@index([workflowId, status])
   @@index([currentStepId])
 }
@@ -717,6 +713,8 @@ model Delegation {
   createdAt DateTime @default(now())
   delegator User @relation("DelegationsGiven", fields: [delegatedBy], references: [id], onDelete: Restrict)
   delegate User @relation("DelegationsReceived", fields: [delegatedTo], references: [id], onDelete: Restrict)
+  workflowInstance WorkflowInstance? @relation("WorkflowDelegations", fields: [workflowId], references: [id], onDelete: Cascade)
+  @@index([workflowId, active])
   @@index([delegatedBy, active])
   @@index([delegatedTo, active])
   @@index([startDate, endDate])
@@ -786,14 +784,16 @@ model SystemEvent {
 
 model BackupRecord {
   id String @id @default(uuid()) @db.Uuid
-  backupType BackupType
-  location String
-  sizeBytes BigInt?
+  organizationId String? @db.Uuid
+  type BackupType
   status BackupStatus
-  startedAt DateTime
+  storageKey String?
+  sizeBytes BigInt?
+  startedAt DateTime @default(now())
   completedAt DateTime?
-  createdBy String? @db.Uuid
+  errorMessage String?
   createdAt DateTime @default(now())
-  @@index([backupType, status])
-  @@index([startedAt])
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  @@index([organizationId, createdAt])
+  @@index([status, createdAt])
 }
