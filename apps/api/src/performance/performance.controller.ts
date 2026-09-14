@@ -9,6 +9,7 @@ import { PerformanceService } from './performance.service';
 import { EvidenceService } from './evidence.service';
 import { WorkflowService } from './workflow.service';
 import { ReviewAccessService } from './review-access.service';
+import { ReviewLockService } from './review-lock.service';
 import { CreateProgramDto } from './dto/create-program.dto';
 import { CreateCycleDto } from './dto/create-cycle.dto';
 import { CreateReviewTypeDto } from './dto/create-review-type.dto';
@@ -26,7 +27,13 @@ import { WorkflowActionDto } from './dto/workflow-action.dto';
 @Controller('performance')
 @UseGuards(SessionGuard, PermissionGuard)
 export class PerformanceController {
-  constructor(private readonly performance: PerformanceService, private readonly evidence: EvidenceService, private readonly workflows: WorkflowService, private readonly reviewAccess: ReviewAccessService) {}
+  constructor(
+    private readonly performance: PerformanceService,
+    private readonly evidence: EvidenceService,
+    private readonly workflows: WorkflowService,
+    private readonly reviewAccess: ReviewAccessService,
+    private readonly reviewLock: ReviewLockService,
+  ) {}
   private isHod(user: AuthRequest['user']) { return user.roles.some((role) => role.code === 'HOD' || role.code === 'SUPER_ADMIN'); }
   private roleCodes(user: AuthRequest['user']) { return user.roles.map((role) => role.code); }
 
@@ -57,6 +64,7 @@ export class PerformanceController {
   @Post('reviews/:reviewId/competencies/:competencyId/supervisor-rating') @RequirePermission('performance.review.score.direct_reports', PermissionScope.DIRECT_REPORTS) async rateCompetencyAsSupervisor(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Param('competencyId') competencyId: string, @Body() dto: UpdateCompetencyRatingDto) { await this.reviewAccess.assertSupervisor(user.employee.organizationId, reviewId, user.id); return this.performance.rateCompetency(user.employee.organizationId, reviewId, competencyId, dto, 'supervisor'); }
   @Post('reviews/:reviewId/calculate-score') @RequirePermission('performance.review.workflow', PermissionScope.ORGANIZATION) calculateScore(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: CalculateScoreDto) { return this.performance.calculateScore(user.employee.organizationId, reviewId, dto); }
   @Post('reviews/:reviewId/finalize') @RequirePermission('performance.review.finalize', PermissionScope.ORGANIZATION) finalizeReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string) { return this.workflows.finalize(user.employee.organizationId, reviewId, user.id); }
+  @Post('reviews/:reviewId/lock') @RequirePermission('performance.review.finalize', PermissionScope.ORGANIZATION) lockReview(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string) { return this.reviewLock.lock(user.employee.organizationId, reviewId, user.id); }
   @Get('reviews/:reviewId/evidence') @RequirePermission('performance.review.read', PermissionScope.ORGANIZATION) listEvidence(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string) { return this.evidence.list(user.employee.organizationId, reviewId); }
   @Post('reviews/:reviewId/evidence') @RequirePermission('performance.review.score.own', PermissionScope.OWN) addEvidence(@CurrentUser() user: AuthRequest['user'], @Param('reviewId') reviewId: string, @Body() dto: CreateEvidenceDto) { return this.evidence.create(user.employee.organizationId, reviewId, user.id, dto); }
   @Delete('evidence/:evidenceId') @RequirePermission('performance.review.score.own', PermissionScope.OWN) deleteEvidence(@CurrentUser() user: AuthRequest['user'], @Param('evidenceId') evidenceId: string) { return this.evidence.remove(user.employee.organizationId, evidenceId, user.id); }
