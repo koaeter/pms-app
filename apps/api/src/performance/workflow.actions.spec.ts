@@ -197,6 +197,21 @@ describe('WorkflowService workflow actions', () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
+  it('does not let an inactive delegation authorize a delegate', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+
+    prisma.delegation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+
+    await expect(service.act('org-1', 'review-1', 'delegate-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it('rejects delegation to an inactive or cross-organization user', async () => {
     prisma.performanceReview.findFirst.mockResolvedValue(review);
     prisma.workflowInstance.findUnique.mockResolvedValue(instance);
