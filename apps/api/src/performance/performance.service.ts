@@ -433,9 +433,7 @@ export class PerformanceService {
     actor: 'employee' | 'supervisor',
   ) {
     const review = await this.requireReview(organizationId, reviewId);
-    if (['FINALIZED', 'LOCKED', 'CANCELLED'].includes(review.status)) {
-      throw new ConflictException('This review can no longer be scored');
-    }
+    this.assertScoringStatus(review.status, actor);
 
     const kpi = await this.prisma.performanceKpi.findFirst({
       where: { id: kpiId, performanceReviewId: review.id },
@@ -459,9 +457,7 @@ export class PerformanceService {
     actor: 'employee' | 'supervisor',
   ) {
     const review = await this.requireReview(organizationId, reviewId);
-    if (['FINALIZED', 'LOCKED', 'CANCELLED'].includes(review.status)) {
-      throw new ConflictException('This review can no longer be rated');
-    }
+    this.assertScoringStatus(review.status, actor);
 
     const competency = await this.prisma.performanceCompetency.findFirst({
       where: { id: competencyId, performanceReviewId: review.id },
@@ -549,6 +545,19 @@ export class PerformanceService {
         overallRating,
       },
     });
+  }
+
+  private assertScoringStatus(status: string, actor: 'employee' | 'supervisor') {
+    const employeeStatuses = ['DRAFT', 'IN_PROGRESS', 'RETURNED', 'RESUBMITTED'];
+    const supervisorStatuses = ['SUBMITTED', 'UNDER_REVIEW'];
+    const allowed = actor === 'employee' ? employeeStatuses : supervisorStatuses;
+    if (!allowed.includes(status)) {
+      throw new ConflictException(
+        actor === 'employee'
+          ? 'Employee assessment is not allowed in the current review status'
+          : 'Supervisor assessment is not allowed in the current review status',
+      );
+    }
   }
 
   private async requireReview(organizationId: string, reviewId: string) {
