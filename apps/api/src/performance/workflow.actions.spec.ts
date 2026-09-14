@@ -59,6 +59,54 @@ describe('WorkflowService workflow actions', () => {
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'supervisor-user', action: 'REVIEW_APPROVE', entityId: 'review-1' }));
   });
 
+  it('approves the final step and completes both the workflow and review', async () => {
+    const finalInstance = {
+      id: 'instance-1', currentStepId: 'step-2', status: WorkflowStatus.IN_PROGRESS,
+      currentStep: { id: 'step-2', canReturn: true, canReject: true },
+      workflow: { steps: [
+        { id: 'step-1', stepOrder: 1 },
+        { id: 'step-2', stepOrder: 2, canReturn: true, canReject: true },
+      ] },
+    };
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(finalInstance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-2', actorType: 'SPECIFIC_USER', actorUserId: 'hr-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+    tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', status: WorkflowStatus.COMPLETED, currentStep: null });
+    tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.APPROVED });
+
+    const result = await service.act('org-1', 'review-1', 'hr-user', WorkflowActionType.APPROVE, {});
+
+    expect(result.status).toBe(WorkflowStatus.COMPLETED);
+    expect(result.currentStep).toBeNull();
+    expect(tx.workflowInstance.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'instance-1' },
+      data: expect.objectContaining({
+        status: WorkflowStatus.COMPLETED,
+        currentStepId: null,
+        completedAt: expect.any(Date),
+      }),
+    }));
+    expect(tx.performanceReview.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'review-1' },
+      data: expect.objectContaining({
+        status: PerformanceReviewStatus.APPROVED,
+        completedAt: expect.any(Date),
+      }),
+    }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'hr-user',
+      action: 'REVIEW_APPROVE',
+      entityId: 'review-1',
+      newValues: expect.objectContaining({
+        reviewStatus: PerformanceReviewStatus.APPROVED,
+        workflowStatus: WorkflowStatus.COMPLETED,
+        currentStepId: null,
+      }),
+    }));
+    expect((service as any).notifyActor).not.toHaveBeenCalled();
+  });
+
   it('returns a review and moves it to RETURNED without advancing the workflow', async () => {
     prisma.performanceReview.findFirst.mockResolvedValue(review);
     prisma.workflowInstance.findUnique.mockResolvedValue(instance);
