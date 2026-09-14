@@ -36,8 +36,15 @@ export class WorkflowService {
     if (!firstStep) throw new ConflictException('Configured workflow has no steps');
     const now = new Date(); const wasReturned = review.status === PerformanceReviewStatus.RETURNED;
     const instance = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.workflowInstance.create({ data: { workflowId: workflow.id, performanceReviewId: review.id, currentStepId: firstStep.id, status: WorkflowStatus.IN_PROGRESS, startedAt: now, actions: { create: { workflowStepId: firstStep.id, performedBy: userId, action: wasReturned ? WorkflowActionType.RESUBMIT : WorkflowActionType.SUBMIT, comment: dto.comment?.trim() || null } } }, include: { currentStep: true } });
-      await tx.performanceReview.update({ where: { id: review.id }, data: { status: wasReturned ? PerformanceReviewStatus.RESUBMITTED : PerformanceReviewStatus.SUBMITTED, submittedAt: now } }); return created;
+      if (wasReturned) {
+        const existing = await tx.workflowInstance.findUnique({ where: { performanceReviewId: review.id } });
+        if (!existing) throw new ConflictException('Returned review has no workflow instance to resume');
+        const resumed = await tx.workflowInstance.update({ where: { id: existing.id }, data: { currentStepId: firstStep.id, status: WorkflowStatus.IN_PROGRESS, startedAt: now, completedAt: null, actions: { create: { workflowStepId: firstStep.id, performedBy: userId, action: WorkflowActionType.RESUBMIT, comment: dto.comment?.trim() || null } } }, include: { currentStep: true } });
+        await tx.performanceReview.update({ where: { id: review.id }, data: { status: PerformanceReviewStatus.RESUBMITTED, submittedAt: now } });
+        return resumed;
+      }
+      const created = await tx.workflowInstance.create({ data: { workflowId: workflow.id, performanceReviewId: review.id, currentStepId: firstStep.id, status: WorkflowStatus.IN_PROGRESS, startedAt: now, actions: { create: { workflowStepId: firstStep.id, performedBy: userId, action: WorkflowActionType.SUBMIT, comment: dto.comment?.trim() || null } } }, include: { currentStep: true } });
+      await tx.performanceReview.update({ where: { id: review.id }, data: { status: PerformanceReviewStatus.SUBMITTED, submittedAt: now } }); return created;
     });
     await this.audit.record({ userId, action: wasReturned ? 'REVIEW_RESUBMITTED' : 'REVIEW_SUBMITTED', module: 'performance', entityType: 'PerformanceReview', entityId: review.id, newValues: { status: wasReturned ? PerformanceReviewStatus.RESUBMITTED : PerformanceReviewStatus.SUBMITTED, workflowId: workflow.id } });
     await this.notifyActor(organizationId, review.id, firstStep, userId); return instance;
@@ -92,8 +99,8 @@ export class WorkflowService {
     await this.audit.record({ userId, action: 'REVIEW_DELEGATED', module: 'performance', entityType: 'PerformanceReview', entityId: reviewId, newValues: { delegatedToUserId: target.id, delegationEndsAt: end } }); return action;
   }
   private async canAct(stepId: string, reviewId: string, workflowInstanceId: string, userId: string) {
-    const delegation = await this.prisma.delegation.findFirst({ where: { workflowId: workflowInstanceId, delegatedTo: userId, startDate: { lte: new Date() }, endDate: { gte: new Date() } } }); if (delegation) return true;
-    const activeDelegation = await this.prisma.delegation.findFirst({ where: { workflowId: workflowInstanceId, startDate: { lte: new Date() }, endDate: { gte: new Date() } } }); if (activeDelegation && activeDelegation.delegatedBy === userId) return false;
+    const delegation = await this.prisma.delegation.findFirst({ where: { workflowId: workflowInstanceId, delegatedTo: userId, active: true, startDate: { lte: new Date() }, endDate: { gte: new Date() } } }); if (delegation) return true;
+    const activeDelegation = await this.prisma.delegation.findFirst({ where: { workflowId: workflowInstanceId, active: true, startDate: { lte: new Date() }, endDate: { gte: new Date() } } }); if (activeDelegation && activeDelegation.delegatedBy === userId) return false;
     const step = await this.prisma.workflowStep.findUnique({ where: { id: stepId }, include: { actorRole: true } }); if (!step) return false;
     const review = await this.prisma.performanceReview.findUnique({ where: { id: reviewId }, include: { employee: { include: { user: true } } } }); if (!review) return false;
     if (step.actorType === WorkflowActorType.SPECIFIC_USER) return step.actorUserId === userId; if (step.actorType === WorkflowActorType.EMPLOYEE) return review.employee.user?.id === userId;
