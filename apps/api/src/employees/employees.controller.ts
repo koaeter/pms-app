@@ -29,13 +29,13 @@ export class EmployeesController {
 
   @Post()
   @RequirePermission('employee.manage', PermissionScope.ORGANIZATION)
-  create(@Req() req: AuthRequest, @Body() dto: CreateEmployeeDto) { return this.employees.create(this.organizationId(req), dto); }
+  create(@Req() req: AuthRequest, @Body() dto: CreateEmployeeDto) { return this.employees.create(this.organizationId(req), dto, req.user.id); }
 
   @Put(':id')
   @RequirePermission('employee.manage', PermissionScope.ORGANIZATION)
-  update(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateEmployeeDto) { return this.employees.update(this.organizationId(req), id, dto); }
+  update(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateEmployeeDto) { return this.employees.update(this.organizationId(req), id, dto, req.user.id); }
 
   @Delete(':id')
   @RequirePermission('employee.manage', PermissionScope.ORGANIZATION)
-  archive(@Req() req: AuthRequest, @Param('id') id: string) { return this.employees.archive(this.organizationId(req), id); }
+  archive(@Req() req: AuthRequest, @Param('id') id: string) { return this.employees.archive(this.organizationId(req), id, req.user.id); }
 }
