@@ -66,4 +66,34 @@ describe('WorkflowService.finalize', () => {
     await expect(service.finalize('org-1', 'review-1', 'user-1')).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.performanceReview.update).not.toHaveBeenCalled();
   });
+
+  it('rejects finalization when the review is already finalized', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue({
+      id: 'review-1', status: PerformanceReviewStatus.FINALIZED,
+      completedAt: new Date('2026-09-10T10:00:00Z'),
+      kpis: [{ employeeScore: 80, supervisorScore: 85 }],
+      competencies: [{ employeeRating: 90, supervisorRating: 92 }],
+      workflowInstance: { status: WorkflowStatus.COMPLETED },
+      scores: [{ overallScore: 90 }],
+    });
+
+    await expect(service.finalize('org-1', 'review-1', 'user-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.performanceReview.update).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('rejects finalization when the review is locked', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue({
+      id: 'review-1', status: PerformanceReviewStatus.LOCKED,
+      completedAt: new Date('2026-09-10T10:00:00Z'),
+      kpis: [{ employeeScore: 80, supervisorScore: 85 }],
+      competencies: [{ employeeRating: 90, supervisorRating: 92 }],
+      workflowInstance: { status: WorkflowStatus.COMPLETED },
+      scores: [{ overallScore: 90 }],
+    });
+
+    await expect(service.finalize('org-1', 'review-1', 'user-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.performanceReview.update).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
 });
