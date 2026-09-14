@@ -7,137 +7,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum AccountStatus {
-  PENDING
-  ACTIVE
-  SUSPENDED
-  LOCKED
-  DISABLED
-  ARCHIVED
-}
-
-enum EmploymentStatus {
-  ACTIVE
-  ON_LEAVE
-  SUSPENDED
-  TERMINATED
-  RETIRED
-  RESIGNED
-}
-
-enum PermissionScope {
-  OWN
-  DIRECT_REPORTS
-  ORG_UNIT
-  ORG_SUBTREE
-  ORGANIZATION
-  ASSIGNED
-  GLOBAL
-}
-
-enum PerformanceCycleStatus {
-  DRAFT
-  OPEN
-  CLOSED
-  ARCHIVED
-}
-
-enum PerformanceReviewStatus {
-  DRAFT
-  IN_PROGRESS
-  SUBMITTED
-  UNDER_REVIEW
-  RETURNED
-  RESUBMITTED
-  APPROVED
-  REJECTED
-  FINALIZED
-  LOCKED
-  CANCELLED
-}
-
-enum WorkflowStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  RETURNED
-  REJECTED
-  CANCELLED
-}
-
-enum WorkflowActorType {
-  EMPLOYEE
-  DIRECT_SUPERVISOR
-  ROLE
-  SPECIFIC_USER
-  ORG_UNIT_HEAD
-  HR
-  PMS_ADMIN
-}
-
-enum WorkflowActionType {
-  SUBMIT
-  APPROVE
-  RETURN
-  REJECT
-  RESUBMIT
-  DELEGATE
-  CANCEL
-}
-
-enum AuthenticationEventType {
-  LOGIN_SUCCESS
-  LOGIN_FAILURE
-  LOGOUT
-  PASSWORD_RESET_REQUESTED
-  PASSWORD_RESET_COMPLETED
-  PASSWORD_CHANGED
-  ACCOUNT_LOCKED
-  ACCOUNT_UNLOCKED
-  MFA_SUCCESS
-  MFA_FAILURE
-  SESSION_REVOKED
-}
-
-enum NotificationType {
-  WORKFLOW
-  SYSTEM
-  SECURITY
-  REMINDER
-}
-
-enum AuditSeverity {
-  INFO
-  WARNING
-  CRITICAL
-}
-
-enum SystemEventSeverity {
-  INFO
-  WARNING
-  ERROR
-  CRITICAL
-}
-
-enum BackupType {
-  DATABASE
-  FILES
-  FULL
-}
-
-enum BackupStatus {
-  STARTED
-  SUCCESS
-  FAILED
-  RESTORED
-}
-
-enum ReportingRelationshipType {
-  DIRECT
-  ACTING
-  MATRIX
-  SECONDARY
-}
+enum AccountStatus { PENDING ACTIVE SUSPENDED LOCKED DISABLED ARCHIVED }
+enum EmploymentStatus { ACTIVE ON_LEAVE SUSPENDED TERMINATED RETIRED RESIGNED }
+enum PermissionScope { OWN DIRECT_REPORTS ORG_UNIT ORG_SUBTREE ORGANIZATION ASSIGNED GLOBAL }
+enum PerformanceCycleStatus { DRAFT OPEN CLOSED ARCHIVED }
+enum PerformanceReviewStatus { DRAFT IN_PROGRESS SUBMITTED UNDER_REVIEW RETURNED RESUBMITTED APPROVED REJECTED FINALIZED LOCKED CANCELLED }
+enum WorkflowStatus { PENDING IN_PROGRESS COMPLETED RETURNED REJECTED CANCELLED }
+enum WorkflowActorType { EMPLOYEE DIRECT_SUPERVISOR ROLE SPECIFIC_USER ORG_UNIT_HEAD HR PMS_ADMIN }
+enum WorkflowActionType { SUBMIT APPROVE RETURN REJECT RESUBMIT DELEGATE CANCEL }
+enum AuthenticationEventType { LOGIN_SUCCESS LOGIN_FAILURE LOGOUT PASSWORD_RESET_REQUESTED PASSWORD_RESET_COMPLETED PASSWORD_CHANGED ACCOUNT_LOCKED ACCOUNT_UNLOCKED MFA_SUCCESS MFA_FAILURE SESSION_REVOKED }
+enum NotificationType { WORKFLOW SYSTEM SECURITY REMINDER }
+enum AuditSeverity { INFO WARNING CRITICAL }
+enum SystemEventSeverity { INFO WARNING ERROR CRITICAL }
+enum BackupType { DATABASE FILES FULL }
+enum BackupStatus { STARTED SUCCESS FAILED RESTORED }
+enum ReportingRelationshipType { DIRECT ACTING MATRIX SECONDARY }
 
 model Organization {
   id String @id @default(uuid()) @db.Uuid
@@ -161,7 +45,6 @@ model Organization {
   systemSettings SystemSetting[]
   @@index([active])
 }
-
 model OrganizationalUnitType {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -177,7 +60,6 @@ model OrganizationalUnitType {
   @@unique([organizationId, code])
   @@index([organizationId, active])
 }
-
 model OrganizationalUnit {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -204,7 +86,6 @@ model OrganizationalUnit {
   @@index([headEmployeeId])
   @@index([active])
 }
-
 model Designation {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -222,7 +103,6 @@ model Designation {
   @@unique([organizationId, code])
   @@index([organizationId, active])
 }
-
 model Employee {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -254,7 +134,6 @@ model Employee {
   @@index([designationId])
   @@index([employmentStatus])
 }
-
 model EmployeeOrganizationalUnit {
   id String @id @default(uuid()) @db.Uuid
   employeeId String @db.Uuid
@@ -274,7 +153,6 @@ model EmployeeOrganizationalUnit {
   @@index([organizationalUnitId, startDate, endDate])
   @@index([supervisorEmployeeId])
 }
-
 model ReportingRelationship {
   id String @id @default(uuid()) @db.Uuid
   employeeId String @db.Uuid
@@ -289,7 +167,6 @@ model ReportingRelationship {
   @@index([employeeId, active])
   @@index([reportsToEmployeeId, active])
 }
-
 model User {
   id String @id @default(uuid()) @db.Uuid
   employeeId String @unique @db.Uuid
@@ -317,7 +194,6 @@ model User {
   systemSettings SystemSetting[]
   @@index([accountStatus])
 }
-
 model Session {
   id String @id @default(uuid()) @db.Uuid
   userId String @db.Uuid
@@ -333,7 +209,6 @@ model Session {
   @@index([userId, revokedAt])
   @@index([expiresAt])
 }
-
 model AuthenticationEvent {
   id String @id @default(uuid()) @db.Uuid
   userId String? @db.Uuid
@@ -348,9 +223,8 @@ model AuthenticationEvent {
   @@index([eventType, createdAt])
   @@index([success, createdAt])
 }
-
 model Role {
-  id String @id @default(uuid()) @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
   organizationId String? @db.Uuid
   organizationalUnitId String? @db.Uuid
   name String
@@ -369,7 +243,6 @@ model Role {
   @@index([organizationalUnitId])
   @@index([active])
 }
-
 model Permission {
   id String @id @default(uuid()) @db.Uuid
   name String
@@ -381,7 +254,6 @@ model Permission {
   createdAt DateTime @default(now())
   roles RolePermission[]
 }
-
 model RolePermission {
   id String @id @default(uuid()) @db.Uuid
   roleId String @db.Uuid
@@ -392,7 +264,6 @@ model RolePermission {
   @@unique([roleId, permissionId])
   @@index([permissionId])
 }
-
 model UserRole {
   id String @id @default(uuid()) @db.Uuid
   userId String @db.Uuid
@@ -405,7 +276,6 @@ model UserRole {
   @@unique([userId, roleId])
   @@index([roleId])
 }
-
 model PerformanceProgram {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -421,7 +291,6 @@ model PerformanceProgram {
   @@unique([organizationId, code])
   @@index([organizationId, active])
 }
-
 model PerformanceCycle {
   id String @id @default(uuid()) @db.Uuid
   programId String @db.Uuid
@@ -440,7 +309,6 @@ model PerformanceCycle {
   @@index([programId, status])
   @@index([startDate, endDate])
 }
-
 model PerformanceReviewType {
   id String @id @default(uuid()) @db.Uuid
   programId String? @db.Uuid
@@ -456,9 +324,8 @@ model PerformanceReviewType {
   @@unique([programId, code])
   @@index([active])
 }
-
 model PerformanceReview {
-  id String @id @default(uuid()) @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
   employeeId String @db.Uuid
   performanceCycleId String @db.Uuid
   reviewTypeId String @db.Uuid
@@ -489,7 +356,6 @@ model PerformanceReview {
   @@index([employeeId, status])
   @@index([reviewTypeId])
 }
-
 model Kpi {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -506,7 +372,6 @@ model Kpi {
   @@unique([organizationId, code])
   @@index([organizationId, active])
 }
-
 model PerformanceKpi {
   id String @id @default(uuid()) @db.Uuid
   performanceReviewId String @db.Uuid
@@ -528,7 +393,6 @@ model PerformanceKpi {
   @@index([performanceReviewId])
   @@index([employeeId])
 }
-
 model Competency {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -543,7 +407,6 @@ model Competency {
   @@unique([organizationId, code])
   @@index([organizationId, active])
 }
-
 model PerformanceCompetency {
   id String @id @default(uuid()) @db.Uuid
   performanceReviewId String @db.Uuid
@@ -562,7 +425,6 @@ model PerformanceCompetency {
   @@index([performanceReviewId])
   @@index([employeeId])
 }
-
 model RatingScale {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -579,7 +441,6 @@ model RatingScale {
   @@unique([organizationId, code])
   @@index([organizationId, active])
 }
-
 model RatingScaleLevel {
   id String @id @default(uuid()) @db.Uuid
   ratingScaleId String @db.Uuid
@@ -591,7 +452,6 @@ model RatingScaleLevel {
   @@unique([ratingScaleId, value])
   @@index([ratingScaleId])
 }
-
 model PerformanceScore {
   id String @id @default(uuid()) @db.Uuid
   performanceReviewId String @db.Uuid
@@ -603,7 +463,6 @@ model PerformanceScore {
   calculator User? @relation(fields: [calculatedBy], references: [id], onDelete: SetNull)
   @@index([performanceReviewId, calculatedAt])
 }
-
 model Evidence {
   id String @id @default(uuid()) @db.Uuid
   performanceReviewId String @db.Uuid
@@ -623,7 +482,6 @@ model Evidence {
   @@index([performanceKpiId])
   @@index([performanceCompetencyId])
 }
-
 model Workflow {
   id String @id @default(uuid()) @db.Uuid
   organizationId String @db.Uuid
@@ -642,7 +500,6 @@ model Workflow {
   @@index([organizationId, active])
   @@index([performanceReviewTypeId])
 }
-
 model WorkflowStep {
   id String @id @default(uuid()) @db.Uuid
   workflowId String @db.Uuid
@@ -666,7 +523,6 @@ model WorkflowStep {
   @@index([actorRoleId])
   @@index([actorUserId])
 }
-
 model WorkflowInstance {
   id String @id @default(uuid()) @db.Uuid
   workflowId String @db.Uuid
@@ -685,7 +541,6 @@ model WorkflowInstance {
   @@index([workflowId, status])
   @@index([currentStepId])
 }
-
 model WorkflowAction {
   id String @id @default(uuid()) @db.Uuid
   workflowInstanceId String @db.Uuid
@@ -700,7 +555,6 @@ model WorkflowAction {
   @@index([workflowInstanceId, createdAt])
   @@index([performedBy, createdAt])
 }
-
 model Delegation {
   id String @id @default(uuid()) @db.Uuid
   delegatedBy String @db.Uuid
@@ -719,7 +573,6 @@ model Delegation {
   @@index([delegatedTo, active])
   @@index([startDate, endDate])
 }
-
 model Notification {
   id String @id @default(uuid()) @db.Uuid
   userId String @db.Uuid
@@ -733,7 +586,6 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, readAt, createdAt])
 }
-
 model AuditLog {
   id String @id @default(uuid()) @db.Uuid
   userId String? @db.Uuid
@@ -754,7 +606,6 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([severity, createdAt])
 }
-
 model SystemSetting {
   id String @id @default(uuid()) @db.Uuid
   organizationId String? @db.Uuid
@@ -770,7 +621,6 @@ model SystemSetting {
   @@unique([organizationId, key])
   @@index([key])
 }
-
 model SystemEvent {
   id String @id @default(uuid()) @db.Uuid
   eventType String
@@ -781,7 +631,6 @@ model SystemEvent {
   @@index([eventType, createdAt])
   @@index([severity, createdAt])
 }
-
 model BackupRecord {
   id String @id @default(uuid()) @db.Uuid
   organizationId String? @db.Uuid
