@@ -133,6 +133,17 @@ describe('WorkflowService workflow actions', () => {
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'supervisor-user', action: 'REVIEW_RETURN', entityId: 'review-1' }));
   });
 
+  it('does not allow actions against a returned workflow instance', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue({ ...review, status: PerformanceReviewStatus.RETURNED });
+    prisma.workflowInstance.findUnique.mockResolvedValue({ ...instance, status: WorkflowStatus.RETURNED });
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.workflowStep.findUnique).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it('rejects an unauthorized workflow actor before mutation', async () => {
     prisma.performanceReview.findFirst.mockResolvedValue(review);
     prisma.workflowInstance.findUnique.mockResolvedValue(instance);
