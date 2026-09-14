@@ -14,6 +14,10 @@ export class ReviewAccessService {
     if (user.employeeId === review.employeeId || user.employeeId === review.supervisorEmployeeIdSnapshot) return;
     if (!roles.includes('SUPERVISOR') && !roles.includes('HOD')) throw new ForbiddenException('You are not authorized to view this review');
 
+    if (roles.includes('SUPERVISOR') && !roles.includes('HOD')) {
+      throw new ForbiddenException('Supervisors may only view reviews for their direct reports');
+    }
+
     const assignments = await this.prisma.employeeOrganizationalUnit.findMany({ where: { supervisorEmployeeId: user.employeeId, isPrimary: true, endDate: null }, select: { organizationalUnitId: true } });
     const unitIds = new Set(assignments.map((assignment) => assignment.organizationalUnitId));
     if (roles.includes('HOD') && unitIds.size) {
