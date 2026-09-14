@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
 
   async list(organizationId: string) {
     return this.prisma.employee.findMany({
@@ -24,8 +25,8 @@ export class EmployeesService {
     return employee;
   }
 
-  async create(organizationId: string, dto: CreateEmployeeDto) {
-    return this.prisma.employee.create({
+  async create(organizationId: string, dto: CreateEmployeeDto, actorUserId: string) {
+    const employee = await this.prisma.employee.create({
       data: {
         organizationId,
         employeeNumber: dto.employeeNumber.trim(),
@@ -38,11 +39,13 @@ export class EmployeesService {
       },
       include: { designation: true },
     });
+    await this.audit.record({ userId: actorUserId, action: 'EMPLOYEE_CREATED', module: 'EMPLOYEES', entityType: 'Employee', entityId: employee.id, newValues: { employeeNumber: employee.employeeNumber, firstName: employee.firstName, lastName: employee.lastName, designationId: employee.designationId } });
+    return employee;
   }
 
-  async update(organizationId: string, id: string, dto: UpdateEmployeeDto) {
-    await this.get(organizationId, id);
-    return this.prisma.employee.update({
+  async update(organizationId: string, id: string, dto: UpdateEmployeeDto, actorUserId: string) {
+    const existing = await this.get(organizationId, id);
+    const employee = await this.prisma.employee.update({
       where: { id },
       data: {
         firstName: dto.firstName?.trim(),
@@ -54,10 +57,14 @@ export class EmployeesService {
       },
       include: { designation: true },
     });
+    await this.audit.record({ userId: actorUserId, action: 'EMPLOYEE_UPDATED', module: 'EMPLOYEES', entityType: 'Employee', entityId: id, oldValues: { firstName: existing.firstName, middleName: existing.middleName, lastName: existing.lastName, email: existing.email, phone: existing.phone, designationId: existing.designationId }, newValues: { firstName: employee.firstName, middleName: employee.middleName, lastName: employee.lastName, email: employee.email, phone: employee.phone, designationId: employee.designationId } });
+    return employee;
   }
 
-  async archive(organizationId: string, id: string) {
-    await this.get(organizationId, id);
-    return this.prisma.employee.update({ where: { id }, data: { active: false } });
+  async archive(organizationId: string, id: string, actorUserId: string) {
+    const existing = await this.get(organizationId, id);
+    const employee = await this.prisma.employee.update({ where: { id }, data: { active: false } });
+    await this.audit.record({ userId: actorUserId, action: 'EMPLOYEE_ARCHIVED', module: 'EMPLOYEES', entityType: 'Employee', entityId: id, oldValues: { active: existing.active }, newValues: { active: false } });
+    return employee;
   }
 }
