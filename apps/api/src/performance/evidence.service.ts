@@ -1,10 +1,11 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateEvidenceDto } from './dto/create-evidence.dto';
 
 @Injectable()
 export class EvidenceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit?: AuditService) {}
 
   async list(organizationId: string, reviewId: string) {
     await this.requireReview(organizationId, reviewId);
@@ -25,6 +26,7 @@ export class EvidenceService {
       if (!competency) throw new NotFoundException('Performance competency not found in this review');
     }
     const evidence = await this.prisma.evidence.create({ data: { performanceReviewId: reviewId, performanceKpiId: dto.performanceKpiId ?? null, performanceCompetencyId: dto.performanceCompetencyId ?? null, uploadedBy: userId, fileName: dto.fileName.trim(), storageKey: dto.storageKey.trim(), mimeType: dto.mimeType?.trim() || null, fileSize: dto.fileSize ?? null, checksum: dto.checksum?.trim() || null, description: dto.description?.trim() || null } });
+    await this.audit?.record({ action: 'EVIDENCE_ADDED', module: 'performance', entityType: 'Evidence', entityId: evidence.id, newValues: { performanceReviewId: reviewId, performanceKpiId: evidence.performanceKpiId, performanceCompetencyId: evidence.performanceCompetencyId, fileName: evidence.fileName, storageKey: evidence.storageKey, checksum: evidence.checksum } });
     return { ...evidence, fileSize: evidence.fileSize === null ? null : Number(evidence.fileSize) };
   }
 
@@ -34,6 +36,7 @@ export class EvidenceService {
     if (['FINALIZED', 'LOCKED', 'CANCELLED'].includes(evidence.performanceReview.status)) throw new ConflictException('Evidence cannot be removed from this review');
     if (evidence.uploadedBy !== userId) throw new ForbiddenException('Only the uploader can remove this evidence');
     await this.prisma.evidence.delete({ where: { id: evidence.id } });
+    await this.audit?.record({ action: 'EVIDENCE_REMOVED', module: 'performance', entityType: 'Evidence', entityId: evidence.id, oldValues: { performanceReviewId: evidence.performanceReviewId, performanceKpiId: evidence.performanceKpiId, performanceCompetencyId: evidence.performanceCompetencyId, fileName: evidence.fileName, storageKey: evidence.storageKey, checksum: evidence.checksum } });
     return { deleted: true, id: evidence.id };
   }
 
