@@ -46,9 +46,11 @@ describe('WorkflowService workflow actions', () => {
     tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', currentStep: { id: 'step-2' } });
     tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.UNDER_REVIEW });
 
-    const result = await service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {});
+    const result = await service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {}) as {
+      currentStep: { id: string } | null;
+    };
 
-    expect(result.currentStep.id).toBe('step-2');
+    expect(result.currentStep?.id).toBe('step-2');
     expect(tx.workflowInstance.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'instance-1' },
       data: expect.objectContaining({ status: WorkflowStatus.IN_PROGRESS, currentStepId: 'step-2' }),
@@ -75,7 +77,10 @@ describe('WorkflowService workflow actions', () => {
     tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', status: WorkflowStatus.COMPLETED, currentStep: null });
     tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.APPROVED });
 
-    const result = await service.act('org-1', 'review-1', 'hr-user', WorkflowActionType.APPROVE, {});
+    const result = await service.act('org-1', 'review-1', 'hr-user', WorkflowActionType.APPROVE, {}) as {
+      status: WorkflowStatus;
+      currentStep: { id: string } | null;
+    };
 
     expect(result.status).toBe(WorkflowStatus.COMPLETED);
     expect(result.currentStep).toBeNull();
