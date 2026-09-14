@@ -20,62 +20,62 @@ export class PerformanceService {
     return this.prisma.performanceProgram.findMany({ where: { organizationId, active: true }, orderBy: { name: 'asc' }, include: { _count: { select: { cycles: true, reviewTypes: true } } } });
   }
 
-  async createProgram(organizationId: string, dto: CreateProgramDto) {
+  async createProgram(organizationId: string, dto: CreateProgramDto, userId?: string) {
     try {
       const program = await this.prisma.performanceProgram.create({ data: { organizationId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null } });
-      await this.audit?.record({ action: 'PERFORMANCE_PROGRAM_CREATED', module: 'performance', entityType: 'PerformanceProgram', entityId: program.id, newValues: { name: program.name, code: program.code } });
+      await this.audit?.record({ userId, action: 'PERFORMANCE_PROGRAM_CREATED', module: 'performance', entityType: 'PerformanceProgram', entityId: program.id, newValues: { name: program.name, code: program.code } });
       return program;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Performance program code already exists'); throw error; }
   }
 
   async listCycles(organizationId: string, programId: string) { await this.requireProgram(organizationId, programId); return this.prisma.performanceCycle.findMany({ where: { programId }, orderBy: { startDate: 'desc' } }); }
 
-  async createCycle(organizationId: string, programId: string, dto: CreateCycleDto) {
+  async createCycle(organizationId: string, programId: string, dto: CreateCycleDto, userId?: string) {
     await this.requireProgram(organizationId, programId);
     const startDate = new Date(dto.startDate); const endDate = new Date(dto.endDate);
     if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) throw new ConflictException('Cycle dates must be valid dates');
     if (endDate <= startDate) throw new ConflictException('Cycle end date must be after cycle start date');
     try {
       const cycle = await this.prisma.performanceCycle.create({ data: { programId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), year: dto.year, startDate, endDate } });
-      await this.audit?.record({ action: 'PERFORMANCE_CYCLE_CREATED', module: 'performance', entityType: 'PerformanceCycle', entityId: cycle.id, newValues: { name: cycle.name, code: cycle.code, startDate: cycle.startDate, endDate: cycle.endDate } });
+      await this.audit?.record({ userId, action: 'PERFORMANCE_CYCLE_CREATED', module: 'performance', entityType: 'PerformanceCycle', entityId: cycle.id, newValues: { name: cycle.name, code: cycle.code, startDate: cycle.startDate, endDate: cycle.endDate } });
       return cycle;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Performance cycle code already exists'); throw error; }
   }
 
   async listReviewTypes(organizationId: string, programId: string) { await this.requireProgram(organizationId, programId); return this.prisma.performanceReviewType.findMany({ where: { programId, active: true }, orderBy: { name: 'asc' } }); }
 
-  async createReviewType(organizationId: string, programId: string, dto: CreateReviewTypeDto) {
+  async createReviewType(organizationId: string, programId: string, dto: CreateReviewTypeDto, userId?: string) {
     await this.requireProgram(organizationId, programId);
     try {
       const reviewType = await this.prisma.performanceReviewType.create({ data: { programId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null } });
-      await this.audit?.record({ action: 'PERFORMANCE_REVIEW_TYPE_CREATED', module: 'performance', entityType: 'PerformanceReviewType', entityId: reviewType.id, newValues: { name: reviewType.name, code: reviewType.code } });
+      await this.audit?.record({ userId, action: 'PERFORMANCE_REVIEW_TYPE_CREATED', module: 'performance', entityType: 'PerformanceReviewType', entityId: reviewType.id, newValues: { name: reviewType.name, code: reviewType.code } });
       return reviewType;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Review type code already exists'); throw error; }
   }
 
   listKpis(organizationId: string) { return this.prisma.kpi.findMany({ where: { organizationId, active: true }, orderBy: { name: 'asc' } }); }
 
-  async createKpi(organizationId: string, dto: CreateKpiDto) {
+  async createKpi(organizationId: string, dto: CreateKpiDto, userId?: string) {
     try {
       const kpi = await this.prisma.kpi.create({ data: { organizationId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null, measurementMethod: dto.measurementMethod?.trim() || null, defaultUnit: dto.defaultUnit?.trim() || null } });
-      await this.audit?.record({ action: 'KPI_CREATED', module: 'performance', entityType: 'Kpi', entityId: kpi.id, newValues: { name: kpi.name, code: kpi.code } });
+      await this.audit?.record({ userId, action: 'KPI_CREATED', module: 'performance', entityType: 'Kpi', entityId: kpi.id, newValues: { name: kpi.name, code: kpi.code } });
       return kpi;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('KPI code already exists'); throw error; }
   }
 
   listCompetencies(organizationId: string) { return this.prisma.competency.findMany({ where: { organizationId, active: true }, orderBy: { name: 'asc' } }); }
 
-  async createCompetency(organizationId: string, dto: CreateCompetencyDto) {
+  async createCompetency(organizationId: string, dto: CreateCompetencyDto, userId?: string) {
     try {
       const competency = await this.prisma.competency.create({ data: { organizationId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null } });
-      await this.audit?.record({ action: 'COMPETENCY_CREATED', module: 'performance', entityType: 'Competency', entityId: competency.id, newValues: { name: competency.name, code: competency.code } });
+      await this.audit?.record({ userId, action: 'COMPETENCY_CREATED', module: 'performance', entityType: 'Competency', entityId: competency.id, newValues: { name: competency.name, code: competency.code } });
       return competency;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Competency code already exists'); throw error; }
   }
 
   listRatingScales(organizationId: string) { return this.prisma.ratingScale.findMany({ where: { organizationId, active: true }, include: { items: { orderBy: { value: 'asc' } } }, orderBy: { name: 'asc' } }); }
 
-  async createRatingScale(organizationId: string, dto: CreateRatingScaleDto) {
+  async createRatingScale(organizationId: string, dto: CreateRatingScaleDto, userId?: string) {
     if (!dto.items?.length) throw new ConflictException('A rating scale must contain at least one item');
     const values = dto.items.map((item) => item.value);
     if (new Set(values).size !== values.length) throw new ConflictException('Rating scale values must be unique');
@@ -87,7 +87,7 @@ export class PerformanceService {
     }
     try {
       const scale = await this.prisma.ratingScale.create({ data: { organizationId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), description: dto.description?.trim() || null, items: { create: dto.items.map((item) => ({ value: item.value, label: item.label.trim(), description: item.description?.trim() || null, minScore: item.minScore, maxScore: item.maxScore })) } }, include: { items: { orderBy: { value: 'asc' } } } });
-      await this.audit?.record({ action: 'RATING_SCALE_CREATED', module: 'performance', entityType: 'RatingScale', entityId: scale.id, newValues: { name: scale.name, code: scale.code, itemCount: scale.items.length } });
+      await this.audit?.record({ userId, action: 'RATING_SCALE_CREATED', module: 'performance', entityType: 'RatingScale', entityId: scale.id, newValues: { name: scale.name, code: scale.code, itemCount: scale.items.length } });
       return scale;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Rating scale code or value already exists'); throw error; }
   }
@@ -111,7 +111,7 @@ export class PerformanceService {
     if (!review) throw new NotFoundException('Performance review not found'); return review;
   }
 
-  async createReview(organizationId: string, dto: CreateReviewDto) {
+  async createReview(organizationId: string, dto: CreateReviewDto, userId?: string) {
     const [employee, cycle, reviewType] = await Promise.all([
       this.prisma.employee.findFirst({ where: { id: dto.employeeId, organizationId, active: true } }),
       this.prisma.performanceCycle.findFirst({ where: { id: dto.performanceCycleId, program: { organizationId }, status: { in: ['DRAFT', 'OPEN'] } }, include: { program: true } }),
@@ -132,28 +132,28 @@ export class PerformanceService {
     if (competencies.length !== competencyIds.length) throw new NotFoundException('One or more competencies were not found in the employee organization');
     try {
       const review = await this.prisma.performanceReview.create({ data: { employeeId: employee.id, performanceCycleId: cycle.id, reviewTypeId: reviewType.id, organizationUnitIdSnapshot: assignment?.organizationalUnitId ?? null, designationIdSnapshot: assignment?.designationId ?? employee.designationId ?? null, supervisorEmployeeIdSnapshot: assignment?.supervisorEmployeeId ?? null, organizationUnitNameSnapshot: assignment?.organizationalUnit.name ?? null, designationNameSnapshot: assignment?.designation?.name ?? null, supervisorNameSnapshot: assignment?.supervisor ? `${assignment.supervisor.firstName} ${assignment.supervisor.lastName}` : null, startedAt: new Date(), kpis: { create: (dto.kpis ?? []).map((item) => { const kpi = kpis.find((entry) => entry.id === item.kpiId)!; return { kpiId: kpi.id, employeeId: employee.id, title: item.title?.trim() || kpi.name, description: item.description?.trim() || kpi.description, target: item.target?.trim() || null, measurementUnit: item.measurementUnit?.trim() || kpi.defaultUnit, weight: item.weight }; }) }, competencies: { create: (dto.competencies ?? []).map((item) => ({ competencyId: item.competencyId, weight: item.weight })) } }, include: { employee: true, performanceCycle: true, reviewType: true, kpis: { include: { kpi: true } }, competencies: { include: { competency: true } } } });
-      await this.audit?.record({ action: 'REVIEW_CREATED', module: 'performance', entityType: 'PerformanceReview', entityId: review.id, newValues: { employeeId: review.employeeId, performanceCycleId: review.performanceCycleId, reviewTypeId: review.reviewTypeId, kpiCount: review.kpis.length, competencyCount: review.competencies.length } });
+      await this.audit?.record({ userId, action: 'REVIEW_CREATED', module: 'performance', entityType: 'PerformanceReview', entityId: review.id, newValues: { employeeId: review.employeeId, performanceCycleId: review.performanceCycleId, reviewTypeId: review.reviewTypeId, kpiCount: review.kpis.length, competencyCount: review.competencies.length } });
       return review;
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('A review already exists for this employee, cycle and review type'); throw error; }
   }
 
-  async scoreKpi(organizationId: string, reviewId: string, kpiId: string, dto: UpdateKpiScoreDto, actor: 'employee' | 'supervisor') {
+  async scoreKpi(organizationId: string, reviewId: string, kpiId: string, dto: UpdateKpiScoreDto, actor: 'employee' | 'supervisor', userId?: string) {
     const review = await this.requireReview(organizationId, reviewId); this.assertScoringStatus(review.status, actor);
     const kpi = await this.prisma.performanceKpi.findFirst({ where: { id: kpiId, performanceReviewId: review.id } }); if (!kpi) throw new NotFoundException('Performance KPI not found');
     const updated = await this.prisma.performanceKpi.update({ where: { id: kpi.id }, data: actor === 'employee' ? { employeeScore: dto.score, actualResult: dto.actualResult?.trim(), employeeComment: dto.comment?.trim() } : { supervisorScore: dto.score, actualResult: dto.actualResult?.trim(), supervisorComment: dto.comment?.trim() } });
-    await this.audit?.record({ action: actor === 'employee' ? 'KPI_EMPLOYEE_SCORED' : 'KPI_SUPERVISOR_SCORED', module: 'performance', entityType: 'PerformanceKpi', entityId: kpi.id, newValues: { performanceReviewId: reviewId, score: dto.score, actor } });
+    await this.audit?.record({ userId, action: actor === 'employee' ? 'KPI_EMPLOYEE_SCORED' : 'KPI_SUPERVISOR_SCORED', module: 'performance', entityType: 'PerformanceKpi', entityId: kpi.id, newValues: { performanceReviewId: reviewId, score: dto.score, actor } });
     return updated;
   }
 
-  async rateCompetency(organizationId: string, reviewId: string, competencyId: string, dto: UpdateCompetencyRatingDto, actor: 'employee' | 'supervisor') {
+  async rateCompetency(organizationId: string, reviewId: string, competencyId: string, dto: UpdateCompetencyRatingDto, actor: 'employee' | 'supervisor', userId?: string) {
     const review = await this.requireReview(organizationId, reviewId); this.assertScoringStatus(review.status, actor);
     const competency = await this.prisma.performanceCompetency.findFirst({ where: { id: competencyId, performanceReviewId: review.id } }); if (!competency) throw new NotFoundException('Performance competency not found');
     const updated = await this.prisma.performanceCompetency.update({ where: { id: competency.id }, data: actor === 'employee' ? { employeeRating: dto.rating, employeeComment: dto.comment?.trim() } : { supervisorRating: dto.rating, supervisorComment: dto.comment?.trim() } });
-    await this.audit?.record({ action: actor === 'employee' ? 'COMPETENCY_EMPLOYEE_RATED' : 'COMPETENCY_SUPERVISOR_RATED', module: 'performance', entityType: 'PerformanceCompetency', entityId: competency.id, newValues: { performanceReviewId: reviewId, rating: dto.rating, actor } });
+    await this.audit?.record({ userId, action: actor === 'employee' ? 'COMPETENCY_EMPLOYEE_RATED' : 'COMPETENCY_SUPERVISOR_RATED', module: 'performance', entityType: 'PerformanceCompetency', entityId: competency.id, newValues: { performanceReviewId: reviewId, rating: dto.rating, actor } });
     return updated;
   }
 
-  async calculateScore(organizationId: string, reviewId: string, dto: CalculateScoreDto) {
+  async calculateScore(organizationId: string, reviewId: string, dto: CalculateScoreDto, userId?: string) {
     await this.requireReview(organizationId, reviewId);
     const review = await this.prisma.performanceReview.findFirst({ where: { id: reviewId }, include: { kpis: true, competencies: true } }); if (!review) throw new NotFoundException('Performance review not found');
     if (['FINALIZED', 'LOCKED', 'CANCELLED'].includes(review.status)) throw new ConflictException('Finalized, locked or cancelled reviews cannot be scored');
@@ -170,7 +170,7 @@ export class PerformanceService {
       const item = scale.items.find((entry) => entry.minScore !== null && overallScore >= Number(entry.minScore) && (entry.maxScore === null || overallScore <= Number(entry.maxScore))); overallRating = item?.label ?? null;
     }
     const score = await this.prisma.performanceScore.create({ data: { performanceReviewId: reviewId, ratingScaleId: dto.ratingScaleId ?? null, kpiScore, competencyScore, overallScore, overallRating } });
-    await this.audit?.record({ action: 'REVIEW_SCORE_CALCULATED', module: 'performance', entityType: 'PerformanceScore', entityId: score.id, newValues: { performanceReviewId: reviewId, kpiScore, competencyScore, overallScore, overallRating, ratingScaleId: dto.ratingScaleId ?? null } });
+    await this.audit?.record({ userId, action: 'REVIEW_SCORE_CALCULATED', module: 'performance', entityType: 'PerformanceScore', entityId: score.id, newValues: { performanceReviewId: reviewId, kpiScore, competencyScore, overallScore, overallRating, ratingScaleId: dto.ratingScaleId ?? null } });
     return score;
   }
 
