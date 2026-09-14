@@ -29,8 +29,9 @@ export class EvidenceService {
   }
 
   async remove(organizationId: string, evidenceId: string, userId: string) {
-    const evidence = await this.prisma.evidence.findFirst({ where: { id: evidenceId, performanceReview: { employee: { organizationId } } } });
+    const evidence = await this.prisma.evidence.findFirst({ where: { id: evidenceId, performanceReview: { employee: { organizationId } } }, include: { performanceReview: { select: { status: true } } } });
     if (!evidence) throw new NotFoundException('Evidence not found');
+    if (['FINALIZED', 'LOCKED', 'CANCELLED'].includes(evidence.performanceReview.status)) throw new ConflictException('Evidence cannot be removed from this review');
     if (evidence.uploadedBy !== userId) throw new ForbiddenException('Only the uploader can remove this evidence');
     await this.prisma.evidence.delete({ where: { id: evidence.id } });
     return { deleted: true, id: evidence.id };
