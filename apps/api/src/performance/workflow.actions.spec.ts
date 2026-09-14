@@ -1,0 +1,227 @@
+import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { PerformanceReviewStatus, WorkflowActionType, WorkflowStatus } from '@prisma/client';
+import { WorkflowService } from './workflow.service';
+
+describe('WorkflowService workflow actions', () => {
+  const tx = {
+    workflowInstance: { update: jest.fn() },
+    performanceReview: { update: jest.fn() },
+    delegation: { create: jest.fn() },
+    workflowAction: { create: jest.fn() },
+  };
+  const prisma = {
+    performanceReview: { findFirst: jest.fn(), findUnique: jest.fn() },
+    workflowInstance: { findUnique: jest.fn() },
+    workflowStep: { findUnique: jest.fn() },
+    delegation: { findFirst: jest.fn() },
+    user: { findUnique: jest.fn(), findFirst: jest.fn() },
+    employeeOrganizationalUnit: { findFirst: jest.fn() },
+    organizationalUnit: { findFirst: jest.fn() },
+    $transaction: jest.fn(),
+  };
+  const audit = { record: jest.fn() };
+  let service: WorkflowService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.$transaction.mockImplementation(async (callback: (value: typeof tx) => unknown) => callback(tx));
+    service = new WorkflowService(prisma as never, audit as never);
+    (service as any).notifyActor = jest.fn().mockResolvedValue(undefined);
+    prisma.delegation.findFirst.mockResolvedValue(null);
+  });
+
+  const review = { id: 'review-1', employeeId: 'employee-1', status: PerformanceReviewStatus.SUBMITTED };
+  const instance = {
+    id: 'instance-1', currentStepId: 'step-1', status: WorkflowStatus.IN_PROGRESS,
+    currentStep: { id: 'step-1', canReturn: true, canReject: true },
+    workflow: { steps: [
+      { id: 'step-1', stepOrder: 1, canReturn: true, canReject: true },
+      { id: 'step-2', stepOrder: 2, canReturn: true, canReject: true },
+    ] },
+  };
+
+  it('approves a step, advances to the next step, and records the actor', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+    tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', currentStep: { id: 'step-2' } });
+    tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.UNDER_REVIEW });
+
+    const result = await service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {}) as {
+      currentStep: { id: string } | null;
+    };
+
+    expect(result.currentStep?.id).toBe('step-2');
+    expect(tx.workflowInstance.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'instance-1' },
+      data: expect.objectContaining({ status: WorkflowStatus.IN_PROGRESS, currentStepId: 'step-2' }),
+    }));
+    expect(tx.performanceReview.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: PerformanceReviewStatus.UNDER_REVIEW }),
+    }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'supervisor-user', action: 'REVIEW_APPROVE', entityId: 'review-1' }));
+  });
+
+  it('approves the final step and completes both the workflow and review', async () => {
+    const finalInstance = {
+      id: 'instance-1', currentStepId: 'step-2', status: WorkflowStatus.IN_PROGRESS,
+      currentStep: { id: 'step-2', canReturn: true, canReject: true },
+      workflow: { steps: [
+        { id: 'step-1', stepOrder: 1 },
+        { id: 'step-2', stepOrder: 2, canReturn: true, canReject: true },
+      ] },
+    };
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(finalInstance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-2', actorType: 'SPECIFIC_USER', actorUserId: 'hr-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+    tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', status: WorkflowStatus.COMPLETED, currentStep: null });
+    tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.APPROVED });
+
+    const result = await service.act('org-1', 'review-1', 'hr-user', WorkflowActionType.APPROVE, {}) as {
+      status: WorkflowStatus;
+      currentStep: { id: string } | null;
+    };
+
+    expect(result.status).toBe(WorkflowStatus.COMPLETED);
+    expect(result.currentStep).toBeNull();
+    expect(tx.workflowInstance.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'instance-1' },
+      data: expect.objectContaining({
+        status: WorkflowStatus.COMPLETED,
+        currentStepId: null,
+        completedAt: expect.any(Date),
+      }),
+    }));
+    expect(tx.performanceReview.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'review-1' },
+      data: expect.objectContaining({
+        status: PerformanceReviewStatus.APPROVED,
+        completedAt: expect.any(Date),
+      }),
+    }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'hr-user',
+      action: 'REVIEW_APPROVE',
+      entityId: 'review-1',
+      newValues: expect.objectContaining({
+        reviewStatus: PerformanceReviewStatus.APPROVED,
+        workflowStatus: WorkflowStatus.COMPLETED,
+        currentStepId: null,
+      }),
+    }));
+    expect((service as any).notifyActor).not.toHaveBeenCalled();
+  });
+
+  it('returns a review and moves it to RETURNED without advancing the workflow', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+    tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', currentStep: null });
+    tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.RETURNED });
+
+    await service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.RETURN, { comment: 'Please revise KPI evidence' });
+
+    expect(tx.workflowInstance.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: WorkflowStatus.RETURNED, currentStepId: null }),
+    }));
+    expect(tx.performanceReview.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: PerformanceReviewStatus.RETURNED }),
+    }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'supervisor-user', action: 'REVIEW_RETURN', entityId: 'review-1' }));
+  });
+
+  it('does not allow actions against a returned workflow instance', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue({ ...review, status: PerformanceReviewStatus.RETURNED });
+    prisma.workflowInstance.findUnique.mockResolvedValue({ ...instance, status: WorkflowStatus.RETURNED });
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.workflowStep.findUnique).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unauthorized workflow actor before mutation', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'different-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('rejects return when the current workflow step disallows it', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue({ ...instance, currentStep: { ...instance.currentStep, canReturn: false } });
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.RETURN, {})).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('allows the active delegate to act while blocking the delegator', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+
+    prisma.delegation.findFirst
+      .mockResolvedValueOnce({ id: 'delegation-1', delegatedBy: 'supervisor-user', delegatedTo: 'delegate-user' })
+      .mockResolvedValueOnce(null);
+    tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', currentStep: { id: 'step-2' } });
+    tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.UNDER_REVIEW });
+
+    await service.act('org-1', 'review-1', 'delegate-user', WorkflowActionType.APPROVE, {});
+
+    expect(tx.workflowInstance.update).toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'delegate-user', action: 'REVIEW_APPROVE' }));
+
+    prisma.$transaction.mockClear();
+    audit.record.mockClear();
+    prisma.delegation.findFirst
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'delegation-1', delegatedBy: 'supervisor-user', delegatedTo: 'delegate-user' });
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('does not let an inactive delegation authorize a delegate', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+
+    prisma.delegation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+
+    await expect(service.act('org-1', 'review-1', 'delegate-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('rejects delegation to an inactive or cross-organization user', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.DELEGATE, { delegateToUserId: 'other-user' })).rejects.toThrow('Delegation target not found');
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'other-user', employee: { organizationId: 'org-1' }, accountStatus: 'ACTIVE' }) }));
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+});

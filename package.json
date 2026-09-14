@@ -1,0 +1,23 @@
+{
+  "name": "pms-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Configurable public-sector Performance Management System",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:format": "prisma format",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prisma": "^6.16.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.0"
+  }
+}
