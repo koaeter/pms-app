@@ -24,7 +24,7 @@ export class OrganizationController {
 
   @Post()
   @RequirePermission('organization.manage', PermissionScope.GLOBAL)
-  create(@Body() dto: CreateOrganizationDto) { return this.organizations.create(dto); }
+  create(@Req() req: AuthRequest, @Body() dto: CreateOrganizationDto) { return this.organizations.create(dto, req.user.id); }
 
   @Get(':organizationId/units')
   @RequirePermission('organization.read', PermissionScope.ORGANIZATION)
@@ -32,7 +32,7 @@ export class OrganizationController {
 
   @Post(':organizationId/units')
   @RequirePermission('organization.manage', PermissionScope.ORGANIZATION)
-  createUnit(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateUnitDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createUnit(organizationId, dto); }
+  createUnit(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateUnitDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createUnit(organizationId, dto, req.user.id); }
 
   @Get(':organizationId/unit-types')
   @RequirePermission('organization.read', PermissionScope.ORGANIZATION)
@@ -40,7 +40,7 @@ export class OrganizationController {
 
   @Post(':organizationId/unit-types')
   @RequirePermission('organization.manage', PermissionScope.ORGANIZATION)
-  createUnitType(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateUnitTypeDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createUnitType(organizationId, dto); }
+  createUnitType(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateUnitTypeDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createUnitType(organizationId, dto, req.user.id); }
 
   @Get(':organizationId/designations')
   @RequirePermission('organization.read', PermissionScope.ORGANIZATION)
@@ -48,7 +48,7 @@ export class OrganizationController {
 
   @Post(':organizationId/designations')
   @RequirePermission('organization.manage', PermissionScope.ORGANIZATION)
-  createDesignation(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateDesignationDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createDesignation(organizationId, dto); }
+  createDesignation(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateDesignationDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createDesignation(organizationId, dto, req.user.id); }
 
   @Get(':organizationId/assignments')
   @RequirePermission('employee.read', PermissionScope.ORGANIZATION)
@@ -56,7 +56,7 @@ export class OrganizationController {
 
   @Post(':organizationId/assignments')
   @RequirePermission('employee.manage', PermissionScope.ORGANIZATION)
-  createAssignment(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateAssignmentDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createAssignment(organizationId, dto); }
+  createAssignment(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateAssignmentDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createAssignment(organizationId, dto, req.user.id); }
 
   @Get(':organizationId/reporting-relationships')
   @RequirePermission('employee.read', PermissionScope.ORGANIZATION)
@@ -64,5 +64,5 @@ export class OrganizationController {
 
   @Post(':organizationId/reporting-relationships')
   @RequirePermission('employee.manage', PermissionScope.ORGANIZATION)
-  createReporting(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateReportingRelationshipDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createReportingRelationship(organizationId, dto); }
+  createReporting(@Req() req: AuthRequest, @Param('organizationId') organizationId: string, @Body() dto: CreateReportingRelationshipDto) { if (this.organizationId(req) !== organizationId) throw new Error('Organization access denied'); return this.organizations.createReportingRelationship(organizationId, dto, req.user.id); }
 }
