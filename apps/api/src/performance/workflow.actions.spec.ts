@@ -6,6 +6,8 @@ describe('WorkflowService workflow actions', () => {
   const tx = {
     workflowInstance: { update: jest.fn() },
     performanceReview: { update: jest.fn() },
+    delegation: { create: jest.fn() },
+    workflowAction: { create: jest.fn() },
   };
   const prisma = {
     performanceReview: { findFirst: jest.fn(), findUnique: jest.fn() },
@@ -151,6 +153,48 @@ describe('WorkflowService workflow actions', () => {
 
     await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.RETURN, {})).rejects.toBeInstanceOf(ConflictException);
 
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('allows the active delegate to act while blocking the delegator', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+
+    prisma.delegation.findFirst
+      .mockResolvedValueOnce({ id: 'delegation-1', delegatedBy: 'supervisor-user', delegatedTo: 'delegate-user' })
+      .mockResolvedValueOnce(null);
+    tx.workflowInstance.update.mockResolvedValue({ id: 'instance-1', currentStep: { id: 'step-2' } });
+    tx.performanceReview.update.mockResolvedValue({ id: 'review-1', status: PerformanceReviewStatus.UNDER_REVIEW });
+
+    await service.act('org-1', 'review-1', 'delegate-user', WorkflowActionType.APPROVE, {});
+
+    expect(tx.workflowInstance.update).toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ userId: 'delegate-user', action: 'REVIEW_APPROVE' }));
+
+    prisma.$transaction.mockClear();
+    audit.record.mockClear();
+    prisma.delegation.findFirst
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'delegation-1', delegatedBy: 'supervisor-user', delegatedTo: 'delegate-user' });
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.APPROVE, {})).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('rejects delegation to an inactive or cross-organization user', async () => {
+    prisma.performanceReview.findFirst.mockResolvedValue(review);
+    prisma.workflowInstance.findUnique.mockResolvedValue(instance);
+    prisma.workflowStep.findUnique.mockResolvedValue({ id: 'step-1', actorType: 'SPECIFIC_USER', actorUserId: 'supervisor-user' });
+    prisma.performanceReview.findUnique.mockResolvedValue({ id: 'review-1', employeeId: 'employee-1', employee: { user: { id: 'employee-user' } } });
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    await expect(service.act('org-1', 'review-1', 'supervisor-user', WorkflowActionType.DELEGATE, { delegateToUserId: 'other-user' })).rejects.toThrow('Delegation target not found');
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'other-user', employee: { organizationId: 'org-1' }, accountStatus: 'ACTIVE' }) }));
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
