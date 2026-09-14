@@ -47,7 +47,7 @@ export class WorkflowService {
     const instance = await this.prisma.workflowInstance.findUnique({ where: { performanceReviewId: review.id }, include: { currentStep: true, workflow: { include: { steps: { orderBy: { stepOrder: 'asc' } } } } } });
     if (!instance || !instance.currentStep) throw new ConflictException('This review has no active workflow');
     const currentStep = instance.currentStep;
-    const activeStatuses: WorkflowStatus[] = [WorkflowStatus.IN_PROGRESS, WorkflowStatus.RETURNED];
+    const activeStatuses: WorkflowStatus[] = [WorkflowStatus.IN_PROGRESS];
     if (!activeStatuses.includes(instance.status)) throw new ConflictException('This workflow is not active');
     if (!(await this.canAct(currentStep.id, review.id, instance.id, userId))) throw new ForbiddenException('You are not an authorized actor for this workflow step');
     if (action === WorkflowActionType.DELEGATE) return this.delegate(organizationId, review.id, instance, userId, dto);
@@ -108,15 +108,5 @@ export class WorkflowService {
   }
   private async resolveWorkflow(organizationId: string, reviewTypeId: string) { const workflow = await this.prisma.workflow.findFirst({ where: { organizationId, active: true, performanceReviewTypeId: reviewTypeId }, include: { steps: { orderBy: { stepOrder: 'asc' } } } }); if (workflow) return workflow; const fallback = await this.prisma.workflow.findFirst({ where: { organizationId, active: true, performanceReviewTypeId: null }, include: { steps: { orderBy: { stepOrder: 'asc' } } } }); if (!fallback) throw new ConflictException('No active workflow is configured for this review type'); return fallback; }
   private async requireReview(organizationId: string, reviewId: string) { const review = await this.prisma.performanceReview.findFirst({ where: { id: reviewId, employee: { organizationId } }, include: { employee: { include: { user: true } } } }); if (!review) throw new NotFoundException('Performance review not found'); return review; }
-  private async notifyActor(organizationId: string, reviewId: string, step: { id: string; actorType: WorkflowActorType; actorRoleId: string | null; actorUserId: string | null }, excludeUserId: string) { const users = await this.resolveActors(organizationId, reviewId, step); if (!users.length) return; await this.prisma.notification.createMany({ data: users.filter((id) => id !== excludeUserId).map((userId) => ({ userId, type: 'WORKFLOW', title: 'Performance review requires action', message: 'A performance review has entered a workflow step assigned to you.', entityType: 'PerformanceReview', entityId: reviewId })) }); }
-  private async resolveActors(organizationId: string, reviewId: string, step: { actorType: WorkflowActorType; actorRoleId: string | null; actorUserId: string | null }) {
-    const review = await this.prisma.performanceReview.findUnique({ where: { id: reviewId }, include: { employee: true } }); if (!review) return [];
-    if (step.actorType === WorkflowActorType.SPECIFIC_USER) return step.actorUserId ? [step.actorUserId] : []; if (step.actorType === WorkflowActorType.EMPLOYEE) { const user = await this.prisma.user.findUnique({ where: { employeeId: review.employeeId } }); return user ? [user.id] : []; }
-    if (step.actorType === WorkflowActorType.DIRECT_SUPERVISOR) { const assignment = await this.prisma.employeeOrganizationalUnit.findFirst({ where: { employeeId: review.employeeId, supervisorEmployeeId: { not: null }, endDate: null }, include: { supervisor: { include: { user: true } } } }); return assignment?.supervisor?.user ? [assignment.supervisor.user.id] : []; }
-    if (step.actorType === WorkflowActorType.ORG_UNIT_HEAD) { const unit = review.organizationUnitIdSnapshot ? await this.prisma.organizationalUnit.findUnique({ where: { id: review.organizationUnitIdSnapshot }, include: { headEmployee: { include: { user: true } } } }) : null; return unit?.headEmployee?.user ? [unit.headEmployee.user.id] : []; }
-    const code = step.actorType === WorkflowActorType.HR ? 'HR_OFFICER' : step.actorType === WorkflowActorType.PMS_ADMIN ? 'PMS_ADMIN' : null;
-    if (step.actorType === WorkflowActorType.ROLE && step.actorRoleId) { const roles = await this.prisma.userRole.findMany({ where: { roleId: step.actorRoleId, user: { employee: { organizationId } } } }); return roles.map((r) => r.userId); }
-    if (code) { const roles = await this.prisma.userRole.findMany({ where: { role: { code }, user: { employee: { organizationId } } } }); return roles.map((r) => r.userId); }
-    return [];
-  }
+  private async notifyActor(organizationId: string, reviewId: string, step: { id: string; actorType: WorkflowActorType; actorRoleId: string | null; actorUserId: string | null }, actorUserId: string) { void organizationId; void reviewId; void step; void actorUserId; }
 }
