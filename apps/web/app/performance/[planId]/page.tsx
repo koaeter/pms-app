@@ -7,9 +7,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type PlanItem = { id: string; type: 'KPI' | 'COMPETENCY'; description?: string | null; weight: number | string; target?: string | null; kpi?: { name: string } | null; competency?: { name: string } | null };
 type RatingScale = { id: string; name: string; levels: { id: string; name: string; score: number | string; description?: string | null }[] };
-type Assessment = { id: string; assessorType: string; status: string; overallScore?: number | string | null; comment?: string | null; assessor?: { user?: { firstName: string; lastName: string } } };
+type Assessment = { id: string; assessorType: string; status: string; overallScore?: number | string | null; comment?: string | null; assessor?: { user?: { firstName: string; lastName: string } }; items?: { planItemId: string; ratingLevelId: string; comment?: string | null }[] };
 type Plan = { id: string; status: string; employeeId: string; employee: { user: { id: string; firstName: string; lastName: string }; managerId?: string | null; department?: { name: string } | null; designation?: { name: string } | null }; cycle: { name: string; organisationId: string; startsAt: string; endsAt: string; programme: { name: string }; reviewType: { name: string } }; items: PlanItem[]; assessments: Assessment[] };
-
 type User = { id: string; roles: string[]; firstName: string };
 
 export default function PerformanceWorkspace() {
@@ -38,8 +37,12 @@ export default function PerformanceWorkspace() {
       setUser(me); setPlan(currentPlan);
       const ratingScales = await request(`/performance/organisations/${currentPlan.cycle.organisationId}/rating-scales`);
       setScales(ratingScales);
-      const existing = currentPlan.assessments.find((a: Assessment) => a.status === 'DRAFT' && ((currentPlan.employee.user.id === me.id && a.assessorType === 'SELF') || a.assessor?.user && a.assessor.user.firstName === me.firstName));
-      if (existing) setOverallComment(existing.comment ?? '');
+      const draft = currentPlan.assessments.find((a: Assessment) => a.status === 'DRAFT' && ['SELF','SUPERVISOR','REVIEWER','FINAL'].includes(a.assessorType));
+      if (draft) {
+        setOverallComment(draft.comment ?? '');
+        setRatings(Object.fromEntries((draft.items ?? []).map((item) => [item.planItemId, item.ratingLevelId])));
+        setComments(Object.fromEntries((draft.items ?? []).map((item) => [item.planItemId, item.comment ?? ''])));
+      }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load performance plan.'); }
   }
 
@@ -98,6 +101,7 @@ export default function PerformanceWorkspace() {
 
   const activeScale = scales[0];
   const currentDraft = plan.assessments.find((a) => a.assessorType === assessorType && a.status === 'DRAFT');
+  const finalSubmitted = plan.assessments.some((a) => a.assessorType === 'FINAL' && a.status === 'SUBMITTED');
   const canEdit = !!assessorType && !['APPROVED', 'LOCKED'].includes(plan.status);
 
   return <main className="shell"><section className="card">
@@ -132,7 +136,7 @@ export default function PerformanceWorkspace() {
       <div className="actions"><button className="button secondary" disabled={busy} onClick={() => saveAssessment(false)}>Save draft</button><button className="button" disabled={busy} onClick={() => saveAssessment(true)}>Submit assessment</button></div>
     </div>}
 
-    {!canEdit && plan.status === 'APPROVED' && admin && <div className="card"><h2>Final approval</h2><p>The final assessment has been submitted and is ready for approval.</p><button className="button" disabled={busy} onClick={approve}>Approve final assessment</button></div>}
+    {plan.status === 'IN_REVIEW' && finalSubmitted && admin && <div className="card"><h2>Final approval</h2><p>The final assessment has been submitted and is ready for approval.</p><button className="button" disabled={busy} onClick={approve}>Approve final assessment</button></div>}
     {plan.status === 'APPROVED' && admin && <div className="card"><h2>Close record</h2><p>Locking prevents further changes to the performance record.</p><button className="button" disabled={busy} onClick={lock}>Lock performance record</button></div>}
     {message && <p className="muted">{message}</p>}
   </section></main>;
