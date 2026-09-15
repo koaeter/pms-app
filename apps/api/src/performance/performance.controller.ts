@@ -1,10 +1,11 @@
 import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { PerformanceAccessService } from './performance-access.service';
 import { PerformanceService } from './performance.service';
 
 @Controller('performance')
 export class PerformanceController {
-  constructor(private readonly service: PerformanceService) {}
+  constructor(private readonly service: PerformanceService, private readonly access: PerformanceAccessService) {}
 
   @Get('organisations/:organisationId/programmes')
   @RequirePermissions('performance.read')
@@ -56,7 +57,10 @@ export class PerformanceController {
 
   @Get('cycles/:cycleId/plans')
   @RequirePermissions('performance.read')
-  plans(@Param('cycleId') cycleId: string) { return this.service.listPlans(cycleId); }
+  async plans(@Param('cycleId') cycleId: string, @Req() request: { user: any }) {
+    const plans = await this.service.listPlans(cycleId);
+    return this.access.filterVisiblePlans(plans, request.user);
+  }
 
   @Post('cycles/:cycleId/plans')
   @RequirePermissions('performance.manage')
@@ -64,29 +68,38 @@ export class PerformanceController {
 
   @Get('plans/:planId')
   @RequirePermissions('performance.read')
-  getPlan(@Param('planId') planId: string) { return this.service.getPlan(planId); }
+  async getPlan(@Param('planId') planId: string, @Req() request: { user: any }) {
+    await this.access.requirePlanRead(planId, request.user);
+    return this.service.getPlan(planId);
+  }
 
   @Post('plans/:planId/items')
   @RequirePermissions('performance.manage')
-  addPlanItem(@Param('planId') planId: string, @Body() body: { type: 'KPI' | 'COMPETENCY'; kpiId?: string; competencyId?: string; description?: string; weight: number; target?: string }) { return this.service.addPlanItem({ ...body, planId }); }
+  async addPlanItem(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { type: 'KPI' | 'COMPETENCY'; kpiId?: string; competencyId?: string; description?: string; weight: number; target?: string }) {
+    await this.access.requirePlanManagement(planId, request.user);
+    return this.service.addPlanItem({ ...body, planId });
+  }
 
   @Post('plans/:planId/submit')
   @RequirePermissions('performance.manage')
-  submitPlan(@Param('planId') planId: string) { return this.service.submitPlan(planId); }
+  async submitPlan(@Param('planId') planId: string, @Req() request: { user: any }) {
+    await this.access.requirePlanManagement(planId, request.user);
+    return this.service.submitPlan(planId);
+  }
 
   @Post('plans/:planId/assessments')
   @RequirePermissions('performance.assess')
-  saveAssessment(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) { return this.service.upsertAssessment(planId, request.user, body); }
+  saveAssessment(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; employeeId?: string | null; roles: string[]; permissions: string[] } }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) { return this.service.upsertAssessment(planId, request.user, body); }
 
   @Post('plans/:planId/assessments/submit')
   @RequirePermissions('performance.assess')
-  submitAssessment(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL' }) { return this.service.submitAssessment(planId, request.user, body.assessorType); }
+  submitAssessment(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; employeeId?: string | null; roles: string[]; permissions: string[] } }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL' }) { return this.service.submitAssessment(planId, request.user, body.assessorType); }
 
   @Post('plans/:planId/approve')
   @RequirePermissions('performance.approve')
-  approveFinalAssessment(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } }) { return this.service.approveFinalAssessment(planId, request.user); }
+  approveFinalAssessment(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; employeeId?: string | null; roles: string[]; permissions: string[] } }) { return this.service.approveFinalAssessment(planId, request.user); }
 
   @Post('plans/:planId/lock')
   @RequirePermissions('performance.approve')
-  lockPlan(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } }) { return this.service.lockPlan(planId, request.user); }
+  lockPlan(@Param('planId') planId: string, @Req() request: { user: { id: string; username: string; employeeId?: string | null; roles: string[]; permissions: string[] } }) { return this.service.lockPlan(planId, request.user); }
 }
