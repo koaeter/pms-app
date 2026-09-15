@@ -81,6 +81,7 @@ export class PerformanceService {
   async createRatingScale(data: { organisationId: string; name: string; description?: string; levels?: Array<{ name: string; score: number; description?: string }> }) {
     await this.requireOrganisation(data.organisationId);
     if (data.levels && data.levels.length === 0) throw new BadRequestException('Rating scale must contain at least one level');
+    if (data.levels?.some((level) => !Number.isFinite(level.score) || level.score <= 0)) throw new BadRequestException('Rating level scores must be greater than zero');
     return this.prisma.ratingScale.create({
       data: {
         organisationId: data.organisationId,
@@ -186,12 +187,16 @@ export class PerformanceService {
     }
 
     const ratingLevels = await this.prisma.ratingLevel.findMany({ where: { id: { in: data.items.map((item) => item.ratingLevelId) } }, include: { scale: true } });
-    const ratingMap = new Map(ratingLevels.map((level) => [level.id, level]));
     if (ratingLevels.length !== data.items.length) throw new BadRequestException('One or more rating levels could not be found');
+    const scaleIds = [...new Set(ratingLevels.map((level) => level.scaleId))];
+    const scales = await this.prisma.ratingScale.findMany({ where: { id: { in: scaleIds } }, include: { levels: true } });
+    if (scales.some((scale) => scale.organisationId !== plan.cycle.organisationId)) throw new BadRequestException('Rating scale does not belong to the cycle organisation');
+    const maxScoreByScale = new Map(scales.map((scale) => [scale.id, Math.max(...scale.levels.map((level) => Number(level.score)))]));
+    const ratingMap = new Map(ratingLevels.map((level) => [level.id, level]));
 
     const scoredItems = data.items.map((item) => {
       const level = ratingMap.get(item.ratingLevelId)!;
-      const maxScore = Math.max(...ratingLevels.filter((candidate) => candidate.scaleId === level.scaleId).map((candidate) => Number(candidate.score)));
+      const maxScore = maxScoreByScale.get(level.scaleId) ?? 0;
       if (maxScore <= 0) throw new BadRequestException('Rating scale maximum score must be greater than zero');
       return {
         planItemId: item.planItemId,
@@ -203,6 +208,7 @@ export class PerformanceService {
     });
 
     const totalWeight = plan.items.reduce((sum, item) => sum + Number(item.weight), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) throw new BadRequestException('Plan item weights must total 100% before assessment');
     const itemById = new Map(plan.items.map((item) => [item.id, item]));
     const overallScore = scoredItems.reduce((sum, item) => sum + (item.score * Number(itemById.get(item.planItemId)!.weight)) / totalWeight, 0);
 
@@ -228,10 +234,9 @@ export class PerformanceService {
     if (assessment.status !== 'DRAFT') throw new BadRequestException('Assessment is not in draft status');
     if (assessment.items.length !== plan.items.length) throw new BadRequestException('Complete every performance plan item before submitting');
 
-    const nextPlanStatus = assessorType === 'FINAL' ? 'IN_REVIEW' : 'IN_REVIEW';
     const updated = await this.prisma.$transaction(async (tx) => {
       const submitted = await tx.performanceAssessment.update({ where: { id: assessment.id }, data: { status: 'SUBMITTED' } });
-      await tx.performancePlan.update({ where: { id: planId }, data: { status: nextPlanStatus } });
+      await tx.performancePlan.update({ where: { id: planId }, data: { status: 'IN_REVIEW' } });
       return submitted;
     });
     return { assessment: updated, workflow: this.workflowFor(plan, assessorType, 'SUBMITTED') };
