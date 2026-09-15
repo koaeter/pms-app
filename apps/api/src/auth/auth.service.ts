@@ -27,7 +27,10 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   async login(username: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { username }, include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } });
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+      include: { employee: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } },
+    });
     if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) throw new UnauthorizedException('Invalid username or password');
 
     const token = randomBytes(32).toString('hex');
@@ -40,7 +43,10 @@ export class AuthService {
 
   async currentUser(token: string) {
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    const session = await this.prisma.session.findUnique({ where: { tokenHash }, include: { user: { include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } } } });
+    const session = await this.prisma.session.findUnique({
+      where: { tokenHash },
+      include: { user: { include: { employee: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } } },
+    });
     if (!session || session.expiresAt <= new Date() || !session.user.isActive) throw new UnauthorizedException('Session expired or invalid');
     return this.presentUser(session.user);
   }
@@ -48,6 +54,16 @@ export class AuthService {
   private presentUser(user: any) {
     const roles = user.roles.map((entry: any) => entry.role.name);
     const permissions = [...new Set(user.roles.flatMap((entry: any) => entry.role.permissions.map((item: any) => item.permission.code)))];
-    return { id: user.id, username: user.username, firstName: user.firstName, lastName: user.lastName, email: user.email, roles, permissions };
+    return {
+      id: user.id,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      employeeId: user.employee?.id ?? null,
+      organisationId: user.employee?.organisationId ?? null,
+      roles,
+      permissions,
+    };
   }
 }
