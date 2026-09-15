@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 
 @Controller('performance')
@@ -75,6 +75,11 @@ export class PerformanceController {
     return this.service.createPlan({ ...body, cycleId });
   }
 
+  @Get('plans/:planId')
+  getPlan(@Param('planId') planId: string) {
+    return this.service.getPlan(planId);
+  }
+
   @Post('plans/:planId/items')
   addPlanItem(@Param('planId') planId: string, @Body() body: { type: 'KPI' | 'COMPETENCY'; kpiId?: string; competencyId?: string; description?: string; weight: number; target?: string }) {
     return this.service.addPlanItem({ ...body, planId });
@@ -83,5 +88,39 @@ export class PerformanceController {
   @Post('plans/:planId/submit')
   submitPlan(@Param('planId') planId: string) {
     return this.service.submitPlan(planId);
+  }
+
+  @Post('plans/:planId/assessments')
+  saveAssessment(
+    @Param('planId') planId: string,
+    @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } },
+    @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> },
+  ) {
+    return this.service.upsertAssessment(planId, request.user, body);
+  }
+
+  @Post('plans/:planId/assessments/submit')
+  submitAssessment(
+    @Param('planId') planId: string,
+    @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } },
+    @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL' },
+  ) {
+    return this.service.submitAssessment(planId, request.user, body.assessorType);
+  }
+
+  @Post('plans/:planId/approve')
+  approveFinalAssessment(
+    @Param('planId') planId: string,
+    @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } },
+  ) {
+    return this.service.approveFinalAssessment(planId, request.user);
+  }
+
+  @Post('plans/:planId/lock')
+  lockPlan(
+    @Param('planId') planId: string,
+    @Req() request: { user: { id: string; username: string; roles: string[]; permissions: string[] } },
+  ) {
+    return this.service.lockPlan(planId, request.user);
   }
 }
