@@ -1,6 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
+export type CurrentUser = {
+  id: string;
+  username: string;
+  roles: string[];
+  permissions: string[];
+};
+
 @Injectable()
 export class PerformanceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -38,6 +45,7 @@ export class PerformanceService {
   async createCycle(data: { organisationId: string; programmeId: string; reviewTypeId: string; name: string; startsAt: string; endsAt: string }) {
     await this.requireOrganisation(data.organisationId);
     const programme = await this.requireProgramme(data.programmeId);
+    if (programme.organisationId !== data.organisationId) throw new BadRequestException('Programme does not belong to this organisation');
     const reviewType = await this.prisma.reviewType.findFirst({ where: { id: data.reviewTypeId, programmeId: programme.id } });
     if (!reviewType) throw new NotFoundException('Review type not found in this programme');
     const startsAt = new Date(data.startsAt);
@@ -72,6 +80,7 @@ export class PerformanceService {
 
   async createRatingScale(data: { organisationId: string; name: string; description?: string; levels?: Array<{ name: string; score: number; description?: string }> }) {
     await this.requireOrganisation(data.organisationId);
+    if (data.levels && data.levels.length === 0) throw new BadRequestException('Rating scale must contain at least one level');
     return this.prisma.ratingScale.create({
       data: {
         organisationId: data.organisationId,
@@ -90,9 +99,31 @@ export class PerformanceService {
         employee: { include: { user: { select: { firstName: true, lastName: true } }, department: true, designation: true } },
         reviewType: true,
         items: { include: { kpi: true, competency: true } },
+        assessments: { include: { assessor: { include: { user: { select: { firstName: true, lastName: true } } } }, items: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  async getPlan(planId: string) {
+    const plan = await this.prisma.performancePlan.findUnique({
+      where: { id: planId },
+      include: {
+        employee: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } }, department: true, designation: true, manager: true } },
+        cycle: { include: { programme: true, reviewType: true } },
+        reviewType: true,
+        items: { include: { kpi: true, competency: true } },
+        assessments: {
+          include: {
+            assessor: { include: { user: { select: { firstName: true, lastName: true } } } },
+            items: { include: { planItem: true, ratingScale: true, ratingLevel: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    if (!plan) throw new NotFoundException('Performance plan not found');
+    return plan;
   }
 
   async createPlan(data: { employeeId: string; cycleId: string; reviewTypeId: string }) {
@@ -101,6 +132,7 @@ export class PerformanceService {
     const cycle = await this.prisma.performanceCycle.findUnique({ where: { id: data.cycleId } });
     if (!cycle) throw new NotFoundException('Performance cycle not found');
     if (cycle.status === 'CLOSED') throw new BadRequestException('Cannot create a plan for a closed cycle');
+    if (!employee.organisationId || employee.organisationId !== cycle.organisationId) throw new BadRequestException('Employee does not belong to the cycle organisation');
     const reviewType = await this.prisma.reviewType.findFirst({ where: { id: data.reviewTypeId, programmeId: cycle.programmeId } });
     if (!reviewType) throw new NotFoundException('Review type does not belong to this cycle programme');
     return this.prisma.performancePlan.create({ data });
@@ -110,12 +142,13 @@ export class PerformanceService {
     const plan = await this.prisma.performancePlan.findUnique({ where: { id: data.planId }, include: { cycle: true } });
     if (!plan) throw new NotFoundException('Performance plan not found');
     if (plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be changed');
+    if (!Number.isFinite(data.weight) || data.weight <= 0 || data.weight > 100) throw new BadRequestException('Item weight must be greater than 0 and no more than 100');
     if (data.type === 'KPI') {
-      if (!data.kpiId) throw new BadRequestException('kpiId is required for a KPI item');
+      if (!data.kpiId || data.competencyId) throw new BadRequestException('A KPI item requires kpiId and must not contain competencyId');
       const kpi = await this.prisma.kpi.findFirst({ where: { id: data.kpiId, programmeId: plan.cycle.programmeId } });
       if (!kpi) throw new NotFoundException('KPI not found in the cycle programme');
     } else {
-      if (!data.competencyId) throw new BadRequestException('competencyId is required for a competency item');
+      if (!data.competencyId || data.kpiId) throw new BadRequestException('A competency item requires competencyId and must not contain kpiId');
       const competency = await this.prisma.competency.findFirst({ where: { id: data.competencyId, programmeId: plan.cycle.programmeId } });
       if (!competency) throw new NotFoundException('Competency not found in the cycle programme');
     }
@@ -125,8 +158,136 @@ export class PerformanceService {
   async submitPlan(planId: string) {
     const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, include: { items: true } });
     if (!plan) throw new NotFoundException('Performance plan not found');
+    if (plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be submitted');
     if (plan.items.length === 0) throw new BadRequestException('A performance plan must contain at least one item');
+    const totalWeight = plan.items.reduce((sum, item) => sum + Number(item.weight), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) throw new BadRequestException(`Plan item weights must total 100%; current total is ${totalWeight.toFixed(2)}%`);
     return this.prisma.performancePlan.update({ where: { id: planId }, data: { status: 'SUBMITTED' } });
+  }
+
+  async upsertAssessment(
+    planId: string,
+    currentUser: CurrentUser,
+    data: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> },
+  ) {
+    const plan = await this.getPlan(planId);
+    const assessor = await this.prisma.employee.findUnique({ where: { userId: currentUser.id } });
+    if (!assessor) throw new BadRequestException('Authenticated user is not linked to an employee record');
+
+    await this.authorizeAssessor(plan, assessor.id, currentUser.roles, data.assessorType);
+    this.validateAssessmentStage(plan, data.assessorType);
+
+    const planItemIds = new Set(plan.items.map((item) => item.id));
+    if (data.items.length !== plan.items.length || data.items.some((item) => !planItemIds.has(item.planItemId))) {
+      throw new BadRequestException('Assessment must contain exactly one rating for every performance plan item');
+    }
+    if (new Set(data.items.map((item) => item.planItemId)).size !== data.items.length) {
+      throw new BadRequestException('Each performance plan item can only be rated once');
+    }
+
+    const ratingLevels = await this.prisma.ratingLevel.findMany({ where: { id: { in: data.items.map((item) => item.ratingLevelId) } }, include: { scale: true } });
+    const ratingMap = new Map(ratingLevels.map((level) => [level.id, level]));
+    if (ratingLevels.length !== data.items.length) throw new BadRequestException('One or more rating levels could not be found');
+
+    const scoredItems = data.items.map((item) => {
+      const level = ratingMap.get(item.ratingLevelId)!;
+      const maxScore = Math.max(...ratingLevels.filter((candidate) => candidate.scaleId === level.scaleId).map((candidate) => Number(candidate.score)));
+      if (maxScore <= 0) throw new BadRequestException('Rating scale maximum score must be greater than zero');
+      return {
+        planItemId: item.planItemId,
+        ratingScaleId: level.scaleId,
+        ratingLevelId: level.id,
+        score: (Number(level.score) / maxScore) * 100,
+        comment: item.comment,
+      };
+    });
+
+    const totalWeight = plan.items.reduce((sum, item) => sum + Number(item.weight), 0);
+    const itemById = new Map(plan.items.map((item) => [item.id, item]));
+    const overallScore = scoredItems.reduce((sum, item) => sum + (item.score * Number(itemById.get(item.planItemId)!.weight)) / totalWeight, 0);
+
+    const existing = await this.prisma.performanceAssessment.findUnique({ where: { planId_assessorId_assessorType: { planId, assessorId: assessor.id, assessorType: data.assessorType } } });
+    if (existing?.status === 'SUBMITTED' || existing?.status === 'APPROVED') throw new BadRequestException('This assessment has already been submitted');
+
+    const assessment = existing
+      ? await this.prisma.performanceAssessment.update({ where: { id: existing.id }, data: { overallScore, comment: data.comment, items: { deleteMany: {}, create: scoredItems } }, include: { items: true } })
+      : await this.prisma.performanceAssessment.create({ data: { planId, assessorId: assessor.id, assessorType: data.assessorType, overallScore, comment: data.comment, items: { create: scoredItems } }, include: { items: true } });
+
+    return { assessment, workflow: this.workflowFor(plan, data.assessorType, 'DRAFT') };
+  }
+
+  async submitAssessment(planId: string, currentUser: CurrentUser, assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL') {
+    const plan = await this.getPlan(planId);
+    const assessor = await this.prisma.employee.findUnique({ where: { userId: currentUser.id } });
+    if (!assessor) throw new BadRequestException('Authenticated user is not linked to an employee record');
+    await this.authorizeAssessor(plan, assessor.id, currentUser.roles, assessorType);
+    this.validateAssessmentStage(plan, assessorType);
+
+    const assessment = await this.prisma.performanceAssessment.findUnique({ where: { planId_assessorId_assessorType: { planId, assessorId: assessor.id, assessorType } }, include: { items: true } });
+    if (!assessment) throw new NotFoundException('Assessment draft not found');
+    if (assessment.status !== 'DRAFT') throw new BadRequestException('Assessment is not in draft status');
+    if (assessment.items.length !== plan.items.length) throw new BadRequestException('Complete every performance plan item before submitting');
+
+    const nextPlanStatus = assessorType === 'FINAL' ? 'IN_REVIEW' : 'IN_REVIEW';
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const submitted = await tx.performanceAssessment.update({ where: { id: assessment.id }, data: { status: 'SUBMITTED' } });
+      await tx.performancePlan.update({ where: { id: planId }, data: { status: nextPlanStatus } });
+      return submitted;
+    });
+    return { assessment: updated, workflow: this.workflowFor(plan, assessorType, 'SUBMITTED') };
+  }
+
+  async approveFinalAssessment(planId: string, currentUser: CurrentUser) {
+    const plan = await this.getPlan(planId);
+    if (!this.canAdministerWorkflow(currentUser.roles)) throw new BadRequestException('You are not authorised to approve final assessments');
+    const finalAssessment = plan.assessments.find((assessment) => assessment.assessorType === 'FINAL' && assessment.status === 'SUBMITTED');
+    if (!finalAssessment) throw new BadRequestException('A submitted final assessment is required before approval');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const assessment = await tx.performanceAssessment.update({ where: { id: finalAssessment.id }, data: { status: 'APPROVED' } });
+      await tx.performancePlan.update({ where: { id: planId }, data: { status: 'APPROVED' } });
+      return assessment;
+    });
+    return { assessment: updated, planStatus: 'APPROVED', finalScore: Number(finalAssessment.overallScore ?? 0) };
+  }
+
+  async lockPlan(planId: string, currentUser: CurrentUser) {
+    const plan = await this.getPlan(planId);
+    if (!this.canAdministerWorkflow(currentUser.roles)) throw new BadRequestException('You are not authorised to lock performance plans');
+    if (plan.status !== 'APPROVED') throw new BadRequestException('Only approved plans can be locked');
+    return this.prisma.performancePlan.update({ where: { id: planId }, data: { status: 'LOCKED' } });
+  }
+
+  private async authorizeAssessor(plan: any, assessorId: string, roles: string[], assessorType: string) {
+    if (assessorType === 'SELF' && plan.employeeId !== assessorId) throw new BadRequestException('Self assessment can only be completed by the employee');
+    if (assessorType === 'SUPERVISOR' && plan.employee.managerId !== assessorId) throw new BadRequestException('Supervisor assessment can only be completed by the employee manager');
+    if ((assessorType === 'REVIEWER' || assessorType === 'FINAL') && !this.canAdministerWorkflow(roles) && !roles.includes('PERFORMANCE_REVIEWER')) {
+      throw new BadRequestException('You are not authorised for this assessment stage');
+    }
+  }
+
+  private validateAssessmentStage(plan: any, assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL') {
+    const submitted = (type: string) => plan.assessments.some((assessment: any) => assessment.assessorType === type && assessment.status !== 'DRAFT');
+    if (plan.status === 'APPROVED' || plan.status === 'LOCKED') throw new BadRequestException('This performance plan is already finalised');
+    if (assessorType === 'SELF' && submitted('SELF')) throw new BadRequestException('Self assessment has already been submitted');
+    if (assessorType === 'SUPERVISOR' && !submitted('SELF')) throw new BadRequestException('Employee self assessment must be submitted first');
+    if (assessorType === 'REVIEWER' && !submitted('SUPERVISOR')) throw new BadRequestException('Supervisor assessment must be submitted first');
+    if (assessorType === 'FINAL' && !submitted('REVIEWER')) throw new BadRequestException('Reviewer assessment must be submitted first');
+  }
+
+  private workflowFor(plan: any, assessorType: string, status: string) {
+    const submitted = new Set(plan.assessments.filter((assessment: any) => assessment.status !== 'DRAFT').map((assessment: any) => assessment.assessorType));
+    if (status === 'SUBMITTED') submitted.add(assessorType);
+    return {
+      self: submitted.has('SELF') ? 'COMPLETED' : 'PENDING',
+      supervisor: submitted.has('SUPERVISOR') ? 'COMPLETED' : submitted.has('SELF') ? 'PENDING' : 'BLOCKED',
+      reviewer: submitted.has('REVIEWER') ? 'COMPLETED' : submitted.has('SUPERVISOR') ? 'PENDING' : 'BLOCKED',
+      final: submitted.has('FINAL') ? 'COMPLETED' : submitted.has('REVIEWER') ? 'PENDING' : 'BLOCKED',
+      approval: plan.status === 'APPROVED' ? 'COMPLETED' : submitted.has('FINAL') ? 'PENDING' : 'BLOCKED',
+    };
+  }
+
+  private canAdministerWorkflow(roles: string[]) {
+    return ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].some((role) => roles.includes(role));
   }
 
   private async requireOrganisation(id: string) {
