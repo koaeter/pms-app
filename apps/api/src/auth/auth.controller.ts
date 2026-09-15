@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { Public } from './public.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Public()
   @Post('login')
   login(@Body() body: { username: string; password: string }) {
     return this.auth.login(body.username, body.password);
