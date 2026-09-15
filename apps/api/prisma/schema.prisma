@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  email        String?  @unique
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sessions     Session[]
+  roles        UserRole[]
+  employee     Employee?
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Employee {
+  id             String       @id @default(uuid())
+  userId         String       @unique
+  employeeNumber String       @unique
+  designationId  String?
+  departmentId   String?
+  managerId      String?
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designation    Designation? @relation(fields: [designationId], references: [id])
+  department     Department?  @relation(fields: [departmentId], references: [id])
+  manager        Employee?    @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports        Employee[]   @relation("EmployeeManager")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Department {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  code      String     @unique
+  parentId  String?
+  parent    Department? @relation("DepartmentTree", fields: [parentId], references: [id])
+  children  Department[] @relation("DepartmentTree")
+  employees Employee[]
+}
+
+model Designation {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  grade     String?
+  employees Employee[]
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String       @id @default(uuid())
+  code        String       @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+}
+
+model PerformanceCycle {
+  id        String   @id @default(uuid())
+  name      String
+  startsAt  DateTime
+  endsAt    DateTime
+  status    CycleStatus @default(DRAFT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum CycleStatus {
+  DRAFT
+  OPEN
+  REVIEW
+  CLOSED
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+}

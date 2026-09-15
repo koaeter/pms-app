@@ -1,0 +1,16 @@
+{
+  "name": "pms-app",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @pms/api dev\" \"pnpm --filter @pms/web dev\"",
+    "build": "pnpm --recursive build",
+    "lint": "pnpm --recursive lint",
+    "db:generate": "pnpm --filter @pms/api prisma:generate",
+    "db:migrate": "pnpm --filter @pms/api prisma:migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

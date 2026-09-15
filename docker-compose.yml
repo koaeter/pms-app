@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pms
+      POSTGRES_USER: pms
+      POSTGRES_PASSWORD: pms_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pms_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  pms_postgres_data:
