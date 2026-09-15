@@ -6,11 +6,12 @@ import { AuthModule } from './auth/auth.module';
 import { OrganisationModule } from './organisation/organisation.module';
 import { PerformanceModule } from './performance/performance.module';
 import { SessionGuard } from './auth/session.guard';
+import { PermissionGuard } from './auth/permission.guard';
 
 @Module({
   imports: [AuthModule, OrganisationModule, PerformanceModule],
   controllers: [HealthController],
-  providers: [PrismaService, { provide: APP_GUARD, useClass: SessionGuard }],
+  providers: [PrismaService, { provide: APP_GUARD, useClass: SessionGuard }, { provide: APP_GUARD, useClass: PermissionGuard }],
   exports: [PrismaService],
 })
 export class AppModule {}
