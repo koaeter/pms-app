@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
 type Organisation = { id: string; name: string; code: string; description?: string | null; isActive: boolean; _count: { departments: number; designations: number; employees: number } };
 type Department = { id: string; name: string; code: string; parent?: { name: string } | null; _count: { employees: number; children: number } };
 type Designation = { id: string; name: string; code?: string | null; grade?: string | null; _count: { employees: number } };
@@ -17,93 +16,36 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export default function OrganisationAdmin() {
-  const [organisations, setOrganisations] = useState<Organisation[]>([]);
-  const [organisationId, setOrganisationId] = useState('');
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [designations, setDesignations] = useState<Designation[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [message, setMessage] = useState('');
-  const [orgForm, setOrgForm] = useState({ name: '', code: '', description: '' });
-  const [deptForm, setDeptForm] = useState({ name: '', code: '', parentId: '' });
-  const [designationForm, setDesignationForm] = useState({ name: '', code: '', grade: '' });
-  const [employeeForm, setEmployeeForm] = useState({ userId: '', employeeNumber: '', departmentId: '', designationId: '', managerId: '' });
+  const [organisations, setOrganisations] = useState<Organisation[]>([]); const [organisationId, setOrganisationId] = useState('');
+  const [departments, setDepartments] = useState<Department[]>([]); const [designations, setDesignations] = useState<Designation[]>([]); const [employees, setEmployees] = useState<Employee[]>([]); const [users, setUsers] = useState<User[]>([]);
+  const [message, setMessage] = useState(''); const [orgForm, setOrgForm] = useState({ name: '', code: '', description: '' }); const [editForm, setEditForm] = useState({ name: '', code: '', description: '', isActive: true });
+  const [deptForm, setDeptForm] = useState({ name: '', code: '', parentId: '' }); const [designationForm, setDesignationForm] = useState({ name: '', code: '', grade: '' }); const [employeeForm, setEmployeeForm] = useState({ userId: '', employeeNumber: '', departmentId: '', designationId: '', managerId: '' });
 
   async function loadOrganisations() {
-    const response = await request('/organisation');
-    if (!response.ok) { setMessage('Unable to load organisations.'); return; }
-    const data = await response.json(); setOrganisations(data);
-    const saved = localStorage.getItem('pms_organisation_id');
-    if (saved && data.some((x: Organisation) => x.id === saved)) setOrganisationId(saved);
-    else if (data[0]) setOrganisationId(data[0].id);
+    const response = await request('/organisation'); if (!response.ok) { setMessage('Unable to load organisations.'); return; }
+    const data = await response.json(); setOrganisations(data); const saved = localStorage.getItem('pms_organisation_id'); const selected = saved && data.some((x: Organisation) => x.id === saved) ? saved : data[0]?.id ?? ''; setOrganisationId(selected);
   }
-
   async function loadOrganisationData(id: string) {
-    if (!id) return;
-    localStorage.setItem('pms_organisation_id', id);
-    const [d, g, e, u] = await Promise.all([
-      request(`/organisation/${id}/departments`), request(`/organisation/${id}/designations`), request(`/organisation/${id}/employees`), request('/admin/users'),
-    ]);
-    if (d.ok) setDepartments(await d.json());
-    if (g.ok) setDesignations(await g.json());
-    if (e.ok) setEmployees(await e.json());
-    if (u.ok) setUsers(await u.json());
+    if (!id) return; localStorage.setItem('pms_organisation_id', id); const selected = organisations.find(o => o.id === id); if (selected) setEditForm({ name: selected.name, code: selected.code, description: selected.description ?? '', isActive: selected.isActive });
+    const [d, g, e, u] = await Promise.all([request(`/organisation/${id}/departments`), request(`/organisation/${id}/designations`), request(`/organisation/${id}/employees`), request('/admin/users')]);
+    if (d.ok) setDepartments(await d.json()); if (g.ok) setDesignations(await g.json()); if (e.ok) setEmployees(await e.json()); if (u.ok) setUsers(await u.json());
   }
+  useEffect(() => { loadOrganisations(); }, []); useEffect(() => { loadOrganisationData(organisationId); }, [organisationId]);
 
-  useEffect(() => { loadOrganisations(); }, []);
-  useEffect(() => { loadOrganisationData(organisationId); }, [organisationId]);
+  async function createOrganisation(event: React.FormEvent) { event.preventDefault(); const r = await request('/organisation', { method: 'POST', body: JSON.stringify(orgForm) }); if (!r.ok) { setMessage(await r.text()); return; } setOrgForm({ name: '', code: '', description: '' }); setMessage('Organisation created.'); await loadOrganisations(); }
+  async function updateOrganisation(event: React.FormEvent) { event.preventDefault(); const r = await request(`/organisation/${organisationId}`, { method: 'PATCH', body: JSON.stringify(editForm) }); if (!r.ok) { setMessage(await r.text()); return; } setMessage('Organisation updated.'); await loadOrganisations(); }
+  async function createDepartment(event: React.FormEvent) { event.preventDefault(); const r = await request(`/organisation/${organisationId}/departments`, { method: 'POST', body: JSON.stringify({ ...deptForm, parentId: deptForm.parentId || undefined }) }); if (!r.ok) { setMessage(await r.text()); return; } setDeptForm({ name: '', code: '', parentId: '' }); setMessage('Department created.'); loadOrganisationData(organisationId); }
+  async function createDesignation(event: React.FormEvent) { event.preventDefault(); const r = await request(`/organisation/${organisationId}/designations`, { method: 'POST', body: JSON.stringify({ ...designationForm, code: designationForm.code || undefined, grade: designationForm.grade || undefined }) }); if (!r.ok) { setMessage(await r.text()); return; } setDesignationForm({ name: '', code: '', grade: '' }); setMessage('Designation created.'); loadOrganisationData(organisationId); }
+  async function assignEmployee(event: React.FormEvent) { event.preventDefault(); const r = await request(`/organisation/${organisationId}/employees`, { method: 'POST', body: JSON.stringify({ ...employeeForm, departmentId: employeeForm.departmentId || undefined, designationId: employeeForm.designationId || undefined, managerId: employeeForm.managerId || undefined }) }); if (!r.ok) { setMessage(await r.text()); return; } setEmployeeForm({ userId: '', employeeNumber: '', departmentId: '', designationId: '', managerId: '' }); setMessage('Employee assignment saved.'); loadOrganisationData(organisationId); }
+  const availableUsers = users.filter(user => !user.employee || employees.some(employee => employee.user.id === user.id)); const selectedOrg = organisations.find(o => o.id === organisationId);
 
-  async function createOrganisation(event: React.FormEvent) {
-    event.preventDefault(); setMessage('');
-    const response = await request('/organisation', { method: 'POST', body: JSON.stringify(orgForm) });
-    if (!response.ok) { setMessage(await response.text()); return; }
-    setOrgForm({ name: '', code: '', description: '' }); setMessage('Organisation created.'); await loadOrganisations();
-  }
-
-  async function createDepartment(event: React.FormEvent) {
-    event.preventDefault();
-    const response = await request(`/organisation/${organisationId}/departments`, { method: 'POST', body: JSON.stringify({ ...deptForm, parentId: deptForm.parentId || undefined }) });
-    if (!response.ok) { setMessage(await response.text()); return; }
-    setDeptForm({ name: '', code: '', parentId: '' }); setMessage('Department created.'); loadOrganisationData(organisationId);
-  }
-
-  async function createDesignation(event: React.FormEvent) {
-    event.preventDefault();
-    const response = await request(`/organisation/${organisationId}/designations`, { method: 'POST', body: JSON.stringify({ ...designationForm, code: designationForm.code || undefined, grade: designationForm.grade || undefined }) });
-    if (!response.ok) { setMessage(await response.text()); return; }
-    setDesignationForm({ name: '', code: '', grade: '' }); setMessage('Designation created.'); loadOrganisationData(organisationId);
-  }
-
-  async function assignEmployee(event: React.FormEvent) {
-    event.preventDefault();
-    const response = await request(`/organisation/${organisationId}/employees`, { method: 'POST', body: JSON.stringify({ ...employeeForm, departmentId: employeeForm.departmentId || undefined, designationId: employeeForm.designationId || undefined, managerId: employeeForm.managerId || undefined }) });
-    if (!response.ok) { setMessage(await response.text()); return; }
-    setEmployeeForm({ userId: '', employeeNumber: '', departmentId: '', designationId: '', managerId: '' }); setMessage('Employee assignment saved.'); loadOrganisationData(organisationId);
-  }
-
-  const availableUsers = users.filter(user => !user.employee || employees.some(employee => employee.user.id === user.id));
-
-  return <main className="shell"><section className="card">
-    <p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Organisation administration</h1>
-    <p>Configure the organisation structure, positions and employee reporting relationships used by the performance system.</p>
-    <div className="actions"><Link className="button secondary" href="/admin">Back to administration</Link></div>
-    {message && <p className="muted">{message}</p>}
-
-    <div className="card"><h2>Organisation</h2>
-      <label>Active organisation<select value={organisationId} onChange={e => setOrganisationId(e.target.value)}><option value="">Select organisation…</option>{organisations.map(o => <option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}</select></label>
-      {organisationId && <p className="muted">{organisations.find(o => o.id === organisationId)?._count.employees ?? 0} employees · {organisations.find(o => o.id === organisationId)?._count.departments ?? 0} departments · {organisations.find(o => o.id === organisationId)?._count.designations ?? 0} designations</p>}
+  return <main className="shell"><section className="card"><p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Organisation administration</h1><p>Configure organisations, departments, positions, employees and reporting relationships.</p><div className="actions"><Link className="button secondary" href="/admin">Back to administration</Link></div>{message && <p className="muted">{message}</p>}
+    <div className="card"><h2>Organisation</h2><label>Active organisation<select value={organisationId} onChange={e => setOrganisationId(e.target.value)}><option value="">Select organisation…</option>{organisations.map(o => <option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}</select></label>{selectedOrg && <p className="muted">{selectedOrg._count.employees} employees · {selectedOrg._count.departments} departments · {selectedOrg._count.designations} designations</p>}
+      {organisationId && <form className="form" onSubmit={updateOrganisation}><h3>Edit selected organisation</h3><label>Name<input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required /></label><label>Code<input value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} required /></label><label>Description<input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} /></label><label><input type="checkbox" checked={editForm.isActive} onChange={e => setEditForm({ ...editForm, isActive: e.target.checked })} /> Active</label><button className="button">Save organisation</button></form>}
       <form className="form" onSubmit={createOrganisation}><h3>New organisation</h3><label>Name<input value={orgForm.name} onChange={e => setOrgForm({ ...orgForm, name: e.target.value })} required /></label><label>Code<input value={orgForm.code} onChange={e => setOrgForm({ ...orgForm, code: e.target.value })} required /></label><label>Description<input value={orgForm.description} onChange={e => setOrgForm({ ...orgForm, description: e.target.value })} /></label><button className="button">Create organisation</button></form>
     </div>
-
-    {organisationId && <>
-      <div className="grid">
-        <div className="card"><h2>Departments</h2><form className="form" onSubmit={createDepartment}><label>Name<input value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} required /></label><label>Code<input value={deptForm.code} onChange={e => setDeptForm({ ...deptForm, code: e.target.value })} required /></label><label>Parent<select value={deptForm.parentId} onChange={e => setDeptForm({ ...deptForm, parentId: e.target.value })}><option value="">Top level</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label><button className="button">Add department</button></form><ul>{departments.map(d => <li key={d.id}><strong>{d.name}</strong> ({d.code}){d.parent ? ` · under ${d.parent.name}` : ''} · {d._count.employees} staff</li>)}</ul></div>
-        <div className="card"><h2>Designations</h2><form className="form" onSubmit={createDesignation}><label>Name<input value={designationForm.name} onChange={e => setDesignationForm({ ...designationForm, name: e.target.value })} required /></label><label>Code<input value={designationForm.code} onChange={e => setDesignationForm({ ...designationForm, code: e.target.value })} /></label><label>Grade<input value={designationForm.grade} onChange={e => setDesignationForm({ ...designationForm, grade: e.target.value })} placeholder="e.g. GL 08" /></label><button className="button">Add designation</button></form><ul>{designations.map(d => <li key={d.id}><strong>{d.name}</strong>{d.grade ? ` · ${d.grade}` : ''}{d.code ? ` · ${d.code}` : ''} · {d._count.employees} staff</li>)}</ul></div>
-      </div>
-
+    {organisationId && <><div className="grid"><div className="card"><h2>Departments</h2><form className="form" onSubmit={createDepartment}><label>Name<input value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} required /></label><label>Code<input value={deptForm.code} onChange={e => setDeptForm({ ...deptForm, code: e.target.value })} required /></label><label>Parent<select value={deptForm.parentId} onChange={e => setDeptForm({ ...deptForm, parentId: e.target.value })}><option value="">Top level</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label><button className="button">Add department</button></form><ul>{departments.map(d => <li key={d.id}><strong>{d.name}</strong> ({d.code}){d.parent ? ` · under ${d.parent.name}` : ''} · {d._count.employees} staff</li>)}</ul></div><div className="card"><h2>Designations</h2><form className="form" onSubmit={createDesignation}><label>Name<input value={designationForm.name} onChange={e => setDesignationForm({ ...designationForm, name: e.target.value })} required /></label><label>Code<input value={designationForm.code} onChange={e => setDesignationForm({ ...designationForm, code: e.target.value })} /></label><label>Grade<input value={designationForm.grade} onChange={e => setDesignationForm({ ...designationForm, grade: e.target.value })} placeholder="e.g. GL 08" /></label><button className="button">Add designation</button></form><ul>{designations.map(d => <li key={d.id}><strong>{d.name}</strong>{d.grade ? ` · ${d.grade}` : ''}{d.code ? ` · ${d.code}` : ''} · {d._count.employees} staff</li>)}</ul></div></div>
       <div className="card"><h2>Employee assignment</h2><p>Link a system user to an employee record and place them in the organisation hierarchy.</p><form className="form" onSubmit={assignEmployee}><label>User<select value={employeeForm.userId} onChange={e => setEmployeeForm({ ...employeeForm, userId: e.target.value })} required><option value="">Select user…</option>{availableUsers.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} (@{u.username})</option>)}</select></label><label>Employee number<input value={employeeForm.employeeNumber} onChange={e => setEmployeeForm({ ...employeeForm, employeeNumber: e.target.value })} required placeholder="EMP-0001" /></label><label>Department<select value={employeeForm.departmentId} onChange={e => setEmployeeForm({ ...employeeForm, departmentId: e.target.value })}><option value="">Not assigned</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label><label>Designation<select value={employeeForm.designationId} onChange={e => setEmployeeForm({ ...employeeForm, designationId: e.target.value })}><option value="">Not assigned</option>{designations.map(d => <option key={d.id} value={d.id}>{d.name}{d.grade ? ` · ${d.grade}` : ''}</option>)}</select></label><label>Manager<select value={employeeForm.managerId} onChange={e => setEmployeeForm({ ...employeeForm, managerId: e.target.value })}><option value="">No manager</option>{employees.filter(e => e.user.id !== employeeForm.userId).map(e => <option key={e.id} value={e.id}>{e.user.firstName} {e.user.lastName} · {e.employeeNumber}</option>)}</select></label><button className="button">Save employee assignment</button></form></div>
-
-      <div className="card"><h2>Employees</h2>{employees.length === 0 ? <p className="muted">No employees assigned to this organisation yet.</p> : <div className="grid">{employees.map(e => <article key={e.id}><strong>{e.user.firstName} {e.user.lastName}</strong><p>{e.employeeNumber} · @{e.user.username}</p><p>{e.department?.name ?? 'No department'} · {e.designation?.name ?? 'No designation'}</p><p>Manager: {e.manager ? `${e.manager.user.firstName} ${e.manager.user.lastName}` : 'None'}</p></article>)}</div>}</div>
-    </>}
+      <div className="card"><h2>Employees</h2>{employees.length === 0 ? <p className="muted">No employees assigned to this organisation yet.</p> : <div className="grid">{employees.map(e => <article key={e.id}><strong>{e.user.firstName} {e.user.lastName}</strong><p>{e.employeeNumber} · @{e.user.username}</p><p>{e.department?.name ?? 'No department'} · {e.designation?.name ?? 'No designation'}</p><p>Manager: {e.manager ? `${e.manager.user.firstName} ${e.manager.user.lastName}` : 'None'}</p></article>)}</div>}</div></>}
   </section></main>;
 }
