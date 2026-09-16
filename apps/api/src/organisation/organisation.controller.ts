@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { OrganisationService } from './organisation.service';
 
@@ -14,6 +14,10 @@ export class OrganisationController {
   @RequirePermissions('organisation.manage')
   createOrganisation(@Body() body: { name: string; code: string; description?: string }) { return this.service.createOrganisation(body); }
 
+  @Patch(':organisationId')
+  @RequirePermissions('organisation.manage')
+  updateOrganisation(@Param('organisationId') organisationId: string, @Body() body: { name?: string; code?: string; description?: string; isActive?: boolean }) { return this.service.updateOrganisation(organisationId, body); }
+
   @Get(':organisationId/departments')
   @RequirePermissions('organisation.read')
   departments(@Param('organisationId') organisationId: string) { return this.service.listDepartments(organisationId); }
@@ -22,6 +26,10 @@ export class OrganisationController {
   @RequirePermissions('organisation.manage')
   createDepartment(@Param('organisationId') organisationId: string, @Body() body: { name: string; code: string; parentId?: string }) { return this.service.createDepartment({ ...body, organisationId }); }
 
+  @Patch('departments/:departmentId')
+  @RequirePermissions('organisation.manage')
+  updateDepartment(@Param('departmentId') departmentId: string, @Body() body: { name?: string; code?: string; parentId?: string | null }) { return this.service.updateDepartment(departmentId, body); }
+
   @Get(':organisationId/designations')
   @RequirePermissions('organisation.read')
   designations(@Param('organisationId') organisationId: string) { return this.service.listDesignations(organisationId); }
@@ -29,6 +37,10 @@ export class OrganisationController {
   @Post(':organisationId/designations')
   @RequirePermissions('organisation.manage')
   createDesignation(@Param('organisationId') organisationId: string, @Body() body: { name: string; code?: string; grade?: string }) { return this.service.createDesignation({ ...body, organisationId }); }
+
+  @Patch('designations/:designationId')
+  @RequirePermissions('organisation.manage')
+  updateDesignation(@Param('designationId') designationId: string, @Body() body: { name?: string; code?: string | null; grade?: string | null }) { return this.service.updateDesignation(designationId, body); }
 
   @Get(':organisationId/employees')
   @RequirePermissions('organisation.read')
