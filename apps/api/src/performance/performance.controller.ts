@@ -17,38 +17,40 @@ export class PerformanceController {
   ) {}
 
   @Get('organisations/:organisationId/programmes') @RequirePermissions('performance.read')
-  programmes(@Param('organisationId') organisationId: string) { return this.service.listProgrammes(organisationId); }
+  async programmes(@Param('organisationId') organisationId: string, @Req() request: { user: any }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.listProgrammes(organisationId); }
   @Post('organisations/:organisationId/programmes') @RequirePermissions('performance.manage')
-  createProgramme(@Param('organisationId') organisationId: string, @Body() body: { name: string; code: string; description?: string }) { return this.service.createProgramme({ ...body, organisationId }); }
+  async createProgramme(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { name: string; code: string; description?: string }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.createProgramme({ ...body, organisationId }); }
   @Get('programmes/:programmeId/review-types') @RequirePermissions('performance.read')
-  reviewTypes(@Param('programmeId') programmeId: string) { return this.service.listReviewTypes(programmeId); }
+  async reviewTypes(@Param('programmeId') programmeId: string, @Req() request: { user: any }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.listReviewTypes(programmeId); }
   @Post('programmes/:programmeId/review-types') @RequirePermissions('performance.manage')
-  createReviewType(@Param('programmeId') programmeId: string, @Body() body: { name: string; code: string; description?: string }) { return this.service.createReviewType({ ...body, programmeId }); }
+  async createReviewType(@Param('programmeId') programmeId: string, @Req() request: { user: any }, @Body() body: { name: string; code: string; description?: string }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.createReviewType({ ...body, programmeId }); }
   @Get('organisations/:organisationId/cycles') @RequirePermissions('performance.read')
-  cycles(@Param('organisationId') organisationId: string) { return this.service.listCycles(organisationId); }
+  async cycles(@Param('organisationId') organisationId: string, @Req() request: { user: any }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.listCycles(organisationId); }
   @Post('organisations/:organisationId/cycles') @RequirePermissions('performance.manage')
-  createCycle(@Param('organisationId') organisationId: string, @Body() body: { programmeId: string; reviewTypeId: string; name: string; startsAt: string; endsAt: string }) { return this.service.createCycle({ ...body, organisationId }); }
+  async createCycle(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { programmeId: string; reviewTypeId: string; name: string; startsAt: string; endsAt: string }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.createCycle({ ...body, organisationId }); }
   @Get('programmes/:programmeId/kpis') @RequirePermissions('performance.read')
-  kpis(@Param('programmeId') programmeId: string) { return this.service.listKpis(programmeId); }
+  async kpis(@Param('programmeId') programmeId: string, @Req() request: { user: any }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.listKpis(programmeId); }
   @Post('programmes/:programmeId/kpis') @RequirePermissions('performance.manage')
-  createKpi(@Param('programmeId') programmeId: string, @Body() body: { name: string; code: string; description?: string; defaultWeight?: number }) { return this.service.createKpi({ ...body, programmeId }); }
+  async createKpi(@Param('programmeId') programmeId: string, @Req() request: { user: any }, @Body() body: { name: string; code: string; description?: string; defaultWeight?: number }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.createKpi({ ...body, programmeId }); }
   @Get('programmes/:programmeId/competencies') @RequirePermissions('performance.read')
-  competencies(@Param('programmeId') programmeId: string) { return this.service.listCompetencies(programmeId); }
+  async competencies(@Param('programmeId') programmeId: string, @Req() request: { user: any }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.listCompetencies(programmeId); }
   @Post('programmes/:programmeId/competencies') @RequirePermissions('performance.manage')
-  createCompetency(@Param('programmeId') programmeId: string, @Body() body: { name: string; code: string; description?: string; defaultWeight?: number }) { return this.service.createCompetency({ ...body, programmeId }); }
+  async createCompetency(@Param('programmeId') programmeId: string, @Req() request: { user: any }, @Body() body: { name: string; code: string; description?: string; defaultWeight?: number }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.createCompetency({ ...body, programmeId }); }
   @Get('organisations/:organisationId/rating-scales') @RequirePermissions('performance.read')
-  ratingScales(@Param('organisationId') organisationId: string) { return this.service.listRatingScales(organisationId); }
+  async ratingScales(@Param('organisationId') organisationId: string, @Req() request: { user: any }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.listRatingScales(organisationId); }
   @Post('organisations/:organisationId/rating-scales') @RequirePermissions('performance.manage')
-  createRatingScale(@Param('organisationId') organisationId: string, @Body() body: { name: string; description?: string; levels?: Array<{ name: string; score: number; description?: string }> }) { return this.service.createRatingScale({ ...body, organisationId }); }
+  async createRatingScale(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { name: string; description?: string; levels?: Array<{ name: string; score: number; description?: string }> }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.createRatingScale({ ...body, organisationId }); }
 
   @Get('cycles/:cycleId/plans') @RequirePermissions('performance.read')
   async plans(@Param('cycleId') cycleId: string, @Req() request: { user: any }) {
+    await this.access.requireCycleAccess(cycleId, request.user);
     const plans = await this.service.listPlans(cycleId);
     return this.access.filterVisiblePlans(plans, request.user);
   }
 
   @Post('cycles/:cycleId/plans') @RequirePermissions('performance.manage')
   async createPlan(@Param('cycleId') cycleId: string, @Req() request: { user: any }, @Body() body: { employeeId: string; reviewTypeId: string }) {
+    await this.access.requireCycleAccess(cycleId, request.user);
     const plan = await this.service.createPlan({ ...body, cycleId });
     await this.audit.record('PERFORMANCE_PLAN_CREATED', 'PerformancePlan', plan.id, request.user.id, { employeeId: body.employeeId, cycleId });
     return plan;
@@ -76,12 +78,14 @@ export class PerformanceController {
 
   @Post('plans/:planId/assessments') @RequirePermissions('performance.assess')
   async saveAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) {
+    await this.access.requirePlanOrganisationAccess(planId, request.user);
     await this.workflow.assertCanAssess(planId, body.assessorType);
     return this.service.upsertAssessment(planId, request.user, body);
   }
 
   @Post('plans/:planId/assessments/submit') @RequirePermissions('performance.assess')
   async submitAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL' }) {
+    await this.access.requirePlanOrganisationAccess(planId, request.user);
     await this.workflow.assertCanAssess(planId, body.assessorType);
     const result = await this.service.submitAssessment(planId, request.user, body.assessorType);
     await this.audit.record('PERFORMANCE_ASSESSMENT_SUBMITTED', 'PerformancePlan', planId, request.user.id, { assessorType: body.assessorType });
@@ -103,6 +107,7 @@ export class PerformanceController {
 
   @Post('plans/:planId/approve') @RequirePermissions('performance.approve')
   async approveFinalAssessment(@Param('planId') planId: string, @Req() request: { user: any }) {
+    await this.access.requirePlanOrganisationAccess(planId, request.user);
     const result = await this.service.approveFinalAssessment(planId, request.user);
     await this.audit.record('PERFORMANCE_FINAL_APPROVED', 'PerformancePlan', planId, request.user.id);
     return result;
@@ -110,6 +115,7 @@ export class PerformanceController {
 
   @Post('plans/:planId/lock') @RequirePermissions('performance.approve')
   async lockPlan(@Param('planId') planId: string, @Req() request: { user: any }) {
+    await this.access.requirePlanOrganisationAccess(planId, request.user);
     const result = await this.service.lockPlan(planId, request.user);
     await this.audit.record('PERFORMANCE_PLAN_LOCKED', 'PerformancePlan', planId, request.user.id);
     return result;
