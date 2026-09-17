@@ -7,6 +7,34 @@ type ScopedUser = { id: string; employeeId?: string | null; organisationId?: str
 export class PerformanceAccessService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async requireOrganisationAccess(organisationId: string, user: ScopedUser) {
+    const organisation = await this.prisma.organisation.findUnique({ where: { id: organisationId } });
+    if (!organisation) throw new NotFoundException('Organisation not found');
+    if (user.roles.includes('SYSTEM_ADMIN') || user.organisationId === organisationId) return organisation;
+    throw new ForbiddenException('You are not authorised to access this organisation');
+  }
+
+  async requireProgrammeAccess(programmeId: string, user: ScopedUser) {
+    const programme = await this.prisma.performanceProgramme.findUnique({ where: { id: programmeId } });
+    if (!programme) throw new NotFoundException('Performance programme not found');
+    await this.requireOrganisationAccess(programme.organisationId, user);
+    return programme;
+  }
+
+  async requireCycleAccess(cycleId: string, user: ScopedUser) {
+    const cycle = await this.prisma.performanceCycle.findUnique({ where: { id: cycleId } });
+    if (!cycle) throw new NotFoundException('Performance cycle not found');
+    await this.requireOrganisationAccess(cycle.organisationId, user);
+    return cycle;
+  }
+
+  async requirePlanOrganisationAccess(planId: string, user: ScopedUser) {
+    const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, include: { employee: true } });
+    if (!plan) throw new NotFoundException('Performance plan not found');
+    await this.requireOrganisationAccess(plan.employee.organisationId ?? '', user);
+    return plan;
+  }
+
   async requirePlanRead(planId: string, user: ScopedUser) {
     const plan = await this.prisma.performancePlan.findUnique({
       where: { id: planId },
