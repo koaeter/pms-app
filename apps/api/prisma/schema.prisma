@@ -20,6 +20,7 @@ model User {
   sessions     Session[]
   roles        UserRole[]
   employee     Employee?
+  notifications Notification[]
 }
 
 model Session {
@@ -32,55 +33,67 @@ model Session {
   @@index([userId])
 }
 
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isRead, createdAt])
+}
+
 model Organisation {
-  id           String              @id @default(uuid())
-  name         String              @unique
-  code         String              @unique
-  description  String?
-  isActive     Boolean             @default(true)
-  departments  Department[]
+  id String @id @default(uuid())
+  name String @unique
+  code String @unique
+  description String?
+  isActive Boolean @default(true)
+  departments Department[]
   designations Designation[]
-  employees    Employee[]
-  programmes   PerformanceProgramme[]
-  cycles       PerformanceCycle[]
+  employees Employee[]
+  programmes PerformanceProgramme[]
+  cycles PerformanceCycle[]
   ratingScales RatingScale[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Employee {
-  id             String        @id @default(uuid())
-  userId         String        @unique
-  employeeNumber String        @unique
+  id String @id @default(uuid())
+  userId String @unique
+  employeeNumber String @unique
   organisationId String?
-  designationId  String?
-  departmentId   String?
-  managerId      String?
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organisation   Organisation? @relation(fields: [organisationId], references: [id])
-  designation    Designation?  @relation(fields: [designationId], references: [id])
-  department     Department?   @relation(fields: [departmentId], references: [id])
-  manager        Employee?     @relation("EmployeeManager", fields: [managerId], references: [id])
-  reports        Employee[]    @relation("EmployeeManager")
+  designationId String?
+  departmentId String?
+  managerId String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation? @relation(fields: [organisationId], references: [id])
+  designation Designation? @relation(fields: [designationId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  manager Employee? @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports Employee[] @relation("EmployeeManager")
   performancePlans PerformancePlan[]
   assessmentsGiven PerformanceAssessment[] @relation("Assessor")
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([organisationId])
   @@index([departmentId])
   @@index([managerId])
 }
 
 model Department {
-  id             String       @id @default(uuid())
+  id String @id @default(uuid())
   organisationId String
-  name           String
-  code           String
-  parentId       String?
-  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  parent         Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
-  children       Department[] @relation("DepartmentTree")
-  employees      Employee[]
+  name String
+  code String
+  parentId String?
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  parent Department? @relation("DepartmentTree", fields: [parentId], references: [id])
+  children Department[] @relation("DepartmentTree")
+  employees Employee[]
   @@unique([organisationId, name])
   @@unique([organisationId, code])
   @@index([organisationId])
@@ -88,260 +101,234 @@ model Department {
 }
 
 model Designation {
-  id             String       @id @default(uuid())
+  id String @id @default(uuid())
   organisationId String
-  name           String
-  code           String?
-  grade          String?
-  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  employees      Employee[]
+  name String
+  code String?
+  grade String?
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  employees Employee[]
   @@unique([organisationId, name])
   @@unique([organisationId, code])
   @@index([organisationId])
 }
 
 model Role {
-  id          String       @id @default(uuid())
-  name        String       @unique
+  id String @id @default(uuid())
+  name String @unique
   description String?
-  users       UserRole[]
+  users UserRole[]
   permissions RolePermission[]
 }
 
 model Permission {
-  id          String       @id @default(uuid())
-  code        String       @unique
+  id String @id @default(uuid())
+  code String @unique
   description String?
-  roles       RolePermission[]
+  roles RolePermission[]
 }
 
 model UserRole {
   userId String
   roleId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
   @@id([userId, roleId])
 }
 
 model RolePermission {
-  roleId       String
+  roleId String
   permissionId String
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   @@id([roleId, permissionId])
 }
 
 model PerformanceProgramme {
-  id             String             @id @default(uuid())
+  id String @id @default(uuid())
   organisationId String
-  name           String
-  code           String
-  description    String?
-  isActive       Boolean            @default(true)
-  organisation   Organisation       @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  reviewTypes    ReviewType[]
-  cycles         PerformanceCycle[]
-  kpis           Kpi[]
-  competencies   Competency[]
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  name String
+  code String
+  description String?
+  isActive Boolean @default(true)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  reviewTypes ReviewType[]
+  cycles PerformanceCycle[]
+  kpis Kpi[]
+  competencies Competency[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@unique([organisationId, code])
   @@index([organisationId])
 }
 
 model ReviewType {
-  id          String               @id @default(uuid())
+  id String @id @default(uuid())
   programmeId String
-  name        String
-  code        String
+  name String
+  code String
   description String?
-  programme   PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  cycles      PerformanceCycle[]
-  plans       PerformancePlan[]
+  programme PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  cycles PerformanceCycle[]
+  plans PerformancePlan[]
   @@unique([programmeId, code])
   @@index([programmeId])
 }
 
 model PerformanceCycle {
-  id             String               @id @default(uuid())
+  id String @id @default(uuid())
   organisationId String
-  programmeId    String
-  reviewTypeId   String
-  name           String
-  startsAt       DateTime
-  endsAt         DateTime
-  status         CycleStatus           @default(DRAFT)
-  organisation   Organisation         @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  programme      PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  reviewType     ReviewType            @relation(fields: [reviewTypeId], references: [id])
-  plans          PerformancePlan[]
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  programmeId String
+  reviewTypeId String
+  name String
+  startsAt DateTime
+  endsAt DateTime
+  status CycleStatus @default(DRAFT)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  programme PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  reviewType ReviewType @relation(fields: [reviewTypeId], references: [id])
+  plans PerformancePlan[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([organisationId])
   @@index([programmeId])
   @@index([reviewTypeId])
 }
 
-enum CycleStatus {
-  DRAFT
-  OPEN
-  REVIEW
-  CLOSED
-}
+enum CycleStatus { DRAFT OPEN REVIEW CLOSED }
 
 model Kpi {
-  id          String               @id @default(uuid())
+  id String @id @default(uuid())
   programmeId String
-  name        String
-  code        String
+  name String
+  code String
   description String?
-  defaultWeight Decimal?           @db.Decimal(5,2)
-  programme   PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  planItems   PerformancePlanItem[]
+  defaultWeight Decimal? @db.Decimal(5,2)
+  programme PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  planItems PerformancePlanItem[]
   @@unique([programmeId, code])
   @@index([programmeId])
 }
 
 model Competency {
-  id          String               @id @default(uuid())
+  id String @id @default(uuid())
   programmeId String
-  name        String
-  code        String
+  name String
+  code String
   description String?
-  defaultWeight Decimal?            @db.Decimal(5,2)
-  programme   PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
-  planItems   PerformancePlanItem[]
+  defaultWeight Decimal? @db.Decimal(5,2)
+  programme PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  planItems PerformancePlanItem[]
   @@unique([programmeId, code])
   @@index([programmeId])
 }
 
 model RatingScale {
-  id             String              @id @default(uuid())
+  id String @id @default(uuid())
   organisationId String
-  name           String
-  description    String?
-  organisation   Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  levels         RatingLevel[]
+  name String
+  description String?
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  levels RatingLevel[]
   assessmentItems PerformanceAssessmentItem[]
   @@unique([organisationId, name])
   @@index([organisationId])
 }
 
 model RatingLevel {
-  id        String      @id @default(uuid())
-  scaleId   String
-  name      String
-  score     Decimal     @db.Decimal(6,2)
+  id String @id @default(uuid())
+  scaleId String
+  name String
+  score Decimal @db.Decimal(6,2)
   description String?
-  scale     RatingScale @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+  scale RatingScale @relation(fields: [scaleId], references: [id], onDelete: Cascade)
   assessmentItems PerformanceAssessmentItem[]
   @@unique([scaleId, name])
   @@index([scaleId])
 }
 
 model PerformancePlan {
-  id          String              @id @default(uuid())
-  employeeId  String
-  cycleId     String
+  id String @id @default(uuid())
+  employeeId String
+  cycleId String
   reviewTypeId String
-  status      PlanStatus          @default(DRAFT)
-  employee    Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  cycle       PerformanceCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  reviewType  ReviewType          @relation(fields: [reviewTypeId], references: [id])
-  items       PerformancePlanItem[]
+  status PlanStatus @default(DRAFT)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  reviewType ReviewType @relation(fields: [reviewTypeId], references: [id])
+  items PerformancePlanItem[]
   assessments PerformanceAssessment[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@unique([employeeId, cycleId, reviewTypeId])
   @@index([cycleId])
   @@index([employeeId])
 }
 
-enum PlanStatus {
-  DRAFT
-  SUBMITTED
-  IN_REVIEW
-  APPROVED
-  LOCKED
-}
-
-enum PlanItemType {
-  KPI
-  COMPETENCY
-}
+enum PlanStatus { DRAFT SUBMITTED IN_REVIEW APPROVED LOCKED }
+enum PlanItemType { KPI COMPETENCY }
+enum AssessorType { SELF SUPERVISOR REVIEWER FINAL }
+enum AssessmentStatus { DRAFT SUBMITTED APPROVED }
 
 model PerformancePlanItem {
-  id            String              @id @default(uuid())
-  planId        String
-  type          PlanItemType
-  kpiId         String?
-  competencyId  String?
-  description   String?
-  weight        Decimal             @db.Decimal(5,2)
-  target        String?
-  plan          PerformancePlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  kpi           Kpi?                @relation(fields: [kpiId], references: [id])
-  competency    Competency?         @relation(fields: [competencyId], references: [id])
+  id String @id @default(uuid())
+  planId String
+  type PlanItemType
+  kpiId String?
+  competencyId String?
+  description String?
+  weight Decimal @db.Decimal(5,2)
+  target String?
+  plan PerformancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  kpi Kpi? @relation(fields: [kpiId], references: [id])
+  competency Competency? @relation(fields: [competencyId], references: [id])
   assessmentItems PerformanceAssessmentItem[]
   @@index([planId])
   @@index([kpiId])
   @@index([competencyId])
 }
 
-enum AssessorType {
-  SELF
-  SUPERVISOR
-  REVIEWER
-  FINAL
-}
-
-enum AssessmentStatus {
-  DRAFT
-  SUBMITTED
-  APPROVED
-}
-
 model PerformanceAssessment {
-  id          String               @id @default(uuid())
-  planId      String
-  assessorId  String
+  id String @id @default(uuid())
+  planId String
+  assessorId String
   assessorType AssessorType
-  status      AssessmentStatus    @default(DRAFT)
-  overallScore Decimal?            @db.Decimal(7,2)
-  comment     String?
-  plan        PerformancePlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  assessor    Employee            @relation("Assessor", fields: [assessorId], references: [id])
-  items       PerformanceAssessmentItem[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  status AssessmentStatus @default(DRAFT)
+  overallScore Decimal? @db.Decimal(7,2)
+  comment String?
+  plan PerformancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  assessor Employee @relation("Assessor", fields: [assessorId], references: [id])
+  items PerformanceAssessmentItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@unique([planId, assessorId, assessorType])
   @@index([planId])
   @@index([assessorId])
 }
 
 model PerformanceAssessmentItem {
-  id            String                @id @default(uuid())
-  assessmentId  String
-  planItemId    String
+  id String @id @default(uuid())
+  assessmentId String
+  planItemId String
   ratingScaleId String?
   ratingLevelId String?
-  score         Decimal?              @db.Decimal(7,2)
-  comment       String?
-  assessment    PerformanceAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  planItem      PerformancePlanItem  @relation(fields: [planItemId], references: [id], onDelete: Cascade)
-  ratingScale   RatingScale?         @relation(fields: [ratingScaleId], references: [id])
-  ratingLevel   RatingLevel?         @relation(fields: [ratingLevelId], references: [id])
+  score Decimal? @db.Decimal(7,2)
+  comment String?
+  assessment PerformanceAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  planItem PerformancePlanItem @relation(fields: [planItemId], references: [id], onDelete: Cascade)
+  ratingScale RatingScale? @relation(fields: [ratingScaleId], references: [id])
+  ratingLevel RatingLevel? @relation(fields: [ratingLevelId], references: [id])
   @@unique([assessmentId, planItemId])
   @@index([planItemId])
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  actorId   String?
-  action    String
-  entity    String
-  entityId  String?
-  metadata  Json?
+  id String @id @default(uuid())
+  actorId String?
+  action String
+  entity String
+  entityId String?
+  metadata Json?
   createdAt DateTime @default(now())
   @@index([entity, entityId])
   @@index([actorId, createdAt])
