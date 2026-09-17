@@ -12,6 +12,13 @@ export class AuthController {
     return this.auth.login(body.username, body.password);
   }
 
+  @Post('logout')
+  logout(@Headers('authorization') authorization?: string) {
+    const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+    if (!token) throw new UnauthorizedException('Bearer token required');
+    return this.auth.logout(token);
+  }
+
   @Get('me')
   me(@Headers('authorization') authorization?: string) {
     const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
