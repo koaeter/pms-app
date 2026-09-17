@@ -8,5 +8,5 @@ test('password hashes are salted and not reversible plaintext', () => {
 
   assert.notEqual(first, second);
   assert.match(first, /^[0-9a-f]+:[0-9a-f]+$/);
-  assert.doesNotInclude(first, 'Correct Horse Battery Staple');
+  assert.equal(first.includes('Correct Horse Battery Staple'), false);
 });
