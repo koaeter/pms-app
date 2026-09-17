@@ -4,6 +4,8 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "test": "node --import tsx --test test",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
