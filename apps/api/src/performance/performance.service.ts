@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 export type CurrentUser = {
@@ -98,6 +98,8 @@ export class PerformanceService {
       where: { cycleId },
       include: {
         employee: { include: { user: { select: { firstName: true, lastName: true } }, department: true, designation: true } },
+        reviewer: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
+        finalAssessor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         reviewType: true,
         items: { include: { kpi: true, competency: true } },
         assessments: { include: { assessor: { include: { user: { select: { firstName: true, lastName: true } } } }, items: true } },
@@ -111,6 +113,8 @@ export class PerformanceService {
       where: { id: planId },
       include: {
         employee: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } }, department: true, designation: true, manager: true } },
+        reviewer: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
+        finalAssessor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         cycle: { include: { programme: true, reviewType: true } },
         reviewType: true,
         items: { include: { kpi: true, competency: true } },
@@ -263,10 +267,23 @@ export class PerformanceService {
   }
 
   private async authorizeAssessor(plan: any, assessorId: string, roles: string[], assessorType: string) {
-    if (assessorType === 'SELF' && plan.employeeId !== assessorId) throw new BadRequestException('Self assessment can only be completed by the employee');
-    if (assessorType === 'SUPERVISOR' && plan.employee.managerId !== assessorId) throw new BadRequestException('Supervisor assessment can only be completed by the employee manager');
-    if ((assessorType === 'REVIEWER' || assessorType === 'FINAL') && !this.canAdministerWorkflow(roles) && !roles.includes('PERFORMANCE_REVIEWER')) {
-      throw new BadRequestException('You are not authorised for this assessment stage');
+    if (assessorType === 'SELF' && plan.employeeId !== assessorId) throw new ForbiddenException('Self assessment can only be completed by the employee');
+    if (assessorType === 'SUPERVISOR' && plan.employee.managerId !== assessorId) throw new ForbiddenException('Supervisor assessment can only be completed by the employee manager');
+
+    if (assessorType === 'REVIEWER') {
+      if (!plan.reviewerId) throw new ForbiddenException('No reviewer has been assigned to this performance plan');
+      if (plan.reviewerId !== assessorId) throw new ForbiddenException('You are not the assigned reviewer for this performance plan');
+      if (!this.canAdministerWorkflow(roles) && !roles.includes('PERFORMANCE_REVIEWER')) {
+        throw new ForbiddenException('You are not authorised for the reviewer assessment stage');
+      }
+    }
+
+    if (assessorType === 'FINAL') {
+      if (!plan.finalAssessorId) throw new ForbiddenException('No final assessor has been assigned to this performance plan');
+      if (plan.finalAssessorId !== assessorId) throw new ForbiddenException('You are not the assigned final assessor for this performance plan');
+      if (!this.canAdministerWorkflow(roles) && !roles.includes('PERFORMANCE_REVIEWER')) {
+        throw new ForbiddenException('You are not authorised for the final assessment stage');
+      }
     }
   }
 
