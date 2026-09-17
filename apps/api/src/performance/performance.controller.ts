@@ -1,12 +1,20 @@
 import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { AuditService } from '../audit.service';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PerformanceAccessService } from './performance-access.service';
+import { AssessmentWorkflowService } from './assessment-workflow.service';
 import { PerformanceService } from './performance.service';
 
 @Controller('performance')
 export class PerformanceController {
-  constructor(private readonly service: PerformanceService, private readonly access: PerformanceAccessService, private readonly audit: AuditService) {}
+  constructor(
+    private readonly service: PerformanceService,
+    private readonly access: PerformanceAccessService,
+    private readonly audit: AuditService,
+    private readonly workflow: AssessmentWorkflowService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   @Get('organisations/:organisationId/programmes') @RequirePermissions('performance.read')
   programmes(@Param('organisationId') organisationId: string) { return this.service.listProgrammes(organisationId); }
@@ -67,12 +75,29 @@ export class PerformanceController {
   }
 
   @Post('plans/:planId/assessments') @RequirePermissions('performance.assess')
-  saveAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) { return this.service.upsertAssessment(planId, request.user, body); }
+  async saveAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) {
+    await this.workflow.assertCanAssess(planId, body.assessorType);
+    return this.service.upsertAssessment(planId, request.user, body);
+  }
 
   @Post('plans/:planId/assessments/submit') @RequirePermissions('performance.assess')
   async submitAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL' }) {
+    await this.workflow.assertCanAssess(planId, body.assessorType);
     const result = await this.service.submitAssessment(planId, request.user, body.assessorType);
     await this.audit.record('PERFORMANCE_ASSESSMENT_SUBMITTED', 'PerformancePlan', planId, request.user.id, { assessorType: body.assessorType });
+
+    const plan = await this.service.getPlan(planId);
+    const recipients = body.assessorType === 'SELF' && plan.employee.manager
+      ? [plan.employee.manager.userId]
+      : body.assessorType === 'SUPERVISOR'
+        ? [plan.employee.user.id]
+        : [];
+    await Promise.all(recipients.map((userId) => this.notifications.notify(
+      userId,
+      'Performance assessment submitted',
+      `${body.assessorType} assessment for ${plan.employee.user.firstName} ${plan.employee.user.lastName} has been submitted.`,
+      `/performance/${planId}`,
+    )));
     return result;
   }
 
