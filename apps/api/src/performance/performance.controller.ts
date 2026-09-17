@@ -4,6 +4,7 @@ import { RequirePermissions } from '../auth/permissions.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PerformanceAccessService } from './performance-access.service';
 import { AssessmentWorkflowService } from './assessment-workflow.service';
+import { PerformanceAssignmentService } from './performance-assignment.service';
 import { PerformanceService } from './performance.service';
 
 @Controller('performance')
@@ -13,6 +14,7 @@ export class PerformanceController {
     private readonly access: PerformanceAccessService,
     private readonly audit: AuditService,
     private readonly workflow: AssessmentWorkflowService,
+    private readonly assignments: PerformanceAssignmentService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -40,6 +42,12 @@ export class PerformanceController {
   async ratingScales(@Param('organisationId') organisationId: string, @Req() request: { user: any }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.listRatingScales(organisationId); }
   @Post('organisations/:organisationId/rating-scales') @RequirePermissions('performance.manage')
   async createRatingScale(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { name: string; description?: string; levels?: Array<{ name: string; score: number; description?: string }> }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.createRatingScale({ ...body, organisationId }); }
+
+  @Get('organisations/:organisationId/assessor-candidates') @RequirePermissions('performance.manage')
+  async assessorCandidates(@Param('organisationId') organisationId: string, @Req() request: { user: any }) {
+    await this.access.requireOrganisationAccess(organisationId, request.user);
+    return this.assignments.listCandidates(organisationId, request.user);
+  }
 
   @Get('cycles/:cycleId/plans') @RequirePermissions('performance.read')
   async plans(@Param('cycleId') cycleId: string, @Req() request: { user: any }) {
@@ -76,10 +84,28 @@ export class PerformanceController {
     return result;
   }
 
+  @Post('plans/:planId/assessors') @RequirePermissions('performance.manage')
+  async assignAssessors(
+    @Param('planId') planId: string,
+    @Req() request: { user: any },
+    @Body() body: { reviewerId?: string | null; finalAssessorId?: string | null },
+  ) {
+    await this.access.requirePlanManagement(planId, request.user);
+    const result = await this.assignments.assignAssessors(planId, body, request.user);
+    await this.audit.record('PERFORMANCE_ASSESSORS_ASSIGNED', 'PerformancePlan', planId, request.user.id, {
+      reviewerId: body.reviewerId ?? null,
+      finalAssessorId: body.finalAssessorId ?? null,
+    });
+    return result;
+  }
+
   @Post('plans/:planId/assessments') @RequirePermissions('performance.assess')
   async saveAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) {
     await this.access.requirePlanOrganisationAccess(planId, request.user);
     await this.workflow.assertCanAssess(planId, body.assessorType);
+    if (body.assessorType === 'REVIEWER' || body.assessorType === 'FINAL') {
+      await this.assignments.assertAssigned(planId, body.assessorType, request.user.id);
+    }
     return this.service.upsertAssessment(planId, request.user, body);
   }
 
@@ -87,6 +113,9 @@ export class PerformanceController {
   async submitAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL' }) {
     await this.access.requirePlanOrganisationAccess(planId, request.user);
     await this.workflow.assertCanAssess(planId, body.assessorType);
+    if (body.assessorType === 'REVIEWER' || body.assessorType === 'FINAL') {
+      await this.assignments.assertAssigned(planId, body.assessorType, request.user.id);
+    }
     const result = await this.service.submitAssessment(planId, request.user, body.assessorType);
     await this.audit.record('PERFORMANCE_ASSESSMENT_SUBMITTED', 'PerformancePlan', planId, request.user.id, { assessorType: body.assessorType });
 
