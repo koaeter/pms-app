@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
-export type ReportsUser = { id: string; roles: string[]; permissions: string[]; organisationId?: string };
+export type ReportsUser = { id: string; roles: string[]; permissions: string[]; organisationId?: string | null };
 
 @Injectable()
 export class ReportsService {
@@ -53,9 +53,10 @@ export class ReportsService {
   }
 
   private async requireOrganisationAccess(organisationId: string, user: ReportsUser) {
-    const exists = await this.prisma.organisation.findUnique({ where: { id: organisationId }, select: { id: true } });
-    if (!exists) throw new NotFoundException('Organisation not found');
-    if (user.roles.includes('SYSTEM_ADMIN') || user.roles.includes('PERFORMANCE_ADMIN') || user.roles.includes('HR_ADMIN')) return;
-    throw new ForbiddenException('You are not authorised to access organisation reports');
+    const organisation = await this.prisma.organisation.findUnique({ where: { id: organisationId }, select: { id: true } });
+    if (!organisation) throw new NotFoundException('Organisation not found');
+    if (user.roles.includes('SYSTEM_ADMIN')) return;
+    if (user.roles.some((role) => ['PERFORMANCE_ADMIN', 'HR_ADMIN'].includes(role)) && user.organisationId === organisationId) return;
+    throw new ForbiddenException('You are not authorised to access this organisation');
   }
 }
