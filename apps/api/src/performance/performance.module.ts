@@ -6,9 +6,11 @@ import { PerformanceService } from './performance.service';
 import { PerformanceAccessService } from './performance-access.service';
 import { CycleWorkflowController } from './cycle-workflow.controller';
 import { CycleWorkflowService } from './cycle-workflow.service';
+import { PerformanceDashboardController } from './performance-dashboard.controller';
+import { PerformanceDashboardService } from './performance-dashboard.service';
 
 @Module({
-  controllers: [PerformanceController, CycleWorkflowController],
-  providers: [PerformanceService, PerformanceAccessService, CycleWorkflowService, AuditService, PrismaService],
+  controllers: [PerformanceController, CycleWorkflowController, PerformanceDashboardController],
+  providers: [PerformanceService, PerformanceAccessService, CycleWorkflowService, PerformanceDashboardService, AuditService, PrismaService],
 })
 export class PerformanceModule {}
