@@ -25,7 +25,7 @@ test('self assessment is blocked until the plan is submitted', async () => {
 test('supervisor assessment requires submitted self assessment', async () => {
   await assert.rejects(
     () => service('OPEN', 'SUBMITTED', []).assertCanAssess('plan-1', 'SUPERVISOR'),
-    /Self assessment must be submitted/,
+    /self assessment must be submitted/i,
   );
 });
 
