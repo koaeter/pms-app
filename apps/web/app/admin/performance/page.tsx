@@ -64,7 +64,7 @@ export default function PerformanceAdmin() {
   return <main className="shell"><section className="card">
     <p className="eyebrow">PERFORMANCE ADMINISTRATION</p><h1>Performance configuration</h1>
     <p>Configure the performance programme structure before assigning plans to employees.</p>
-    <div className="actions"><Link className="button secondary" href="/admin">Back to administration</Link></div>
+    <div className="actions"><Link className="button secondary" href="/admin">Back to administration</Link><Link className="button" href="/admin/performance/cycles">Manage cycle workflow</Link></div>
     {message && <p className="muted">{message}</p>}
 
     <div className="card"><h2>Organisation context</h2><label>Organisation ID<input value={organisationId} onChange={e => setOrganisationId(e.target.value)} placeholder="Organisation ID" /></label><button className="button" onClick={() => loadAll()}>Load configuration</button></div>
