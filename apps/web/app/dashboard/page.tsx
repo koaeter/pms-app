@@ -4,11 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
-type User = { id: string; username: string; firstName: string; lastName: string; roles: string[] };
-type Employee = { id: string; userId: string; managerId?: string | null; organisationId?: string | null; user: { firstName: string; lastName: string } };
-type Plan = { id: string; status: string; employeeId: string; cycle: { name: string; organisationId: string; reviewType: { name: string } }; employee: { user: { firstName: string; lastName: string }; managerId?: string | null }; assessments: { assessorType: string; status: string; overallScore?: number | string | null }[] };
-type Organisation = { id: string; name: string; code: string };
+type User = { id: string; username: string; firstName: string; lastName: string; employeeId?: string | null; organisationId?: string | null; roles: string[] };
+type Plan = { id: string; status: string; employeeId: string; cycle: { name: string; reviewType: { name: string } }; employee?: { user: { firstName: string; lastName: string } }; assessments: { assessorType: string; status: string; overallScore?: number | string | null }[] };
 
 export default function Dashboard() {
   const router = useRouter();
@@ -21,29 +18,18 @@ export default function Dashboard() {
     const token = localStorage.getItem('pms_token');
     if (!token) { router.replace('/login'); throw new Error('Not signed in'); }
     const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error('Unable to load dashboard data');
+    if (!response.ok) throw new Error(await response.text() || 'Unable to load dashboard data');
     return response.json();
   }
 
   useEffect(() => {
     (async () => {
       try {
-        const me = await request('/auth/me');
+        const me: User = await request('/auth/me');
         setUser(me);
-        const organisations: Organisation[] = await request('/organisation');
-        let employee: Employee | null = null;
-        let organisation: Organisation | null = null;
-        for (const candidate of organisations) {
-          const employees: Employee[] = await request(`/organisation/${candidate.id}/employees`);
-          const match = employees.find((item) => item.userId === me.id);
-          if (match) { employee = match; organisation = candidate; break; }
-        }
-        if (!employee || !organisation) { setMessage('Your account is not yet linked to an employee record.'); return; }
-        const cycles = await request(`/performance/organisations/${organisation.id}/cycles`);
-        const allPlans: Plan[] = [];
-        for (const cycle of cycles) allPlans.push(...await request(`/performance/cycles/${cycle.id}/plans`));
-        setPlans(allPlans.filter((plan) => plan.employeeId === employee!.id));
-        setTeamPlans(allPlans.filter((plan) => plan.employee.managerId === employee!.id));
+        const [myPlans, team] = await Promise.all([request('/performance/dashboard/me'), request('/performance/dashboard/team')]);
+        setPlans(myPlans);
+        setTeamPlans(team);
       } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load dashboard.'); }
     })();
   }, [router]);
@@ -55,17 +41,19 @@ export default function Dashboard() {
   return <main className="shell"><section className="card">
     <p className="eyebrow">PMS DASHBOARD</p>
     <h1>Welcome, {user.firstName}</h1>
-    <p>{user.username}</p>
+    <p>{user.username} · {user.roles.join(', ')}</p>
     {message && <p className="muted">{message}</p>}
     <div className="grid">
       <section className="card"><h2>My Performance</h2><p>{plans.length} performance plan{plans.length === 1 ? '' : 's'}.</p>
-        {plans.map((plan) => <article className="card" key={plan.id}><strong>{plan.cycle.name}</strong><p>{plan.cycle.reviewType.name} · {plan.status}</p><button className="button" onClick={() => router.push(`/performance/${plan.id}`)}>Open performance record</button></article>)}
+        {plans.slice(0, 6).map((plan) => <article className="card" key={plan.id}><strong>{plan.cycle.name}</strong><p>{plan.cycle.reviewType.name} · {plan.status}</p><button className="button" onClick={() => router.push(`/performance/${plan.id}`)}>Open performance record</button></article>)}
+        <button className="button secondary" onClick={() => router.push('/performance/history')}>View performance history</button>
       </section>
-      <section className="card"><h2>My Team</h2><p>{teamPlans.length} team performance plan{teamPlans.length === 1 ? '' : 's'}.</p><p className="muted">{pendingTeam.length} pending supervisor review{pendingTeam.length === 1 ? '' : 's'}.</p>
-        {teamPlans.slice(0, 8).map((plan) => <article className="card" key={plan.id}><strong>{plan.employee.user.firstName} {plan.employee.user.lastName}</strong><p>{plan.cycle.name} · {plan.status}</p><button className="button secondary" onClick={() => router.push(`/performance/${plan.id}`)}>Review</button></article>)}
+      <section className="card"><h2>My Team</h2><p>{teamPlans.length} active team performance plan{teamPlans.length === 1 ? '' : 's'}.</p><p className="muted">{pendingTeam.length} pending supervisor review{pendingTeam.length === 1 ? '' : 's'}.</p>
+        {teamPlans.slice(0, 8).map((plan) => <article className="card" key={plan.id}><strong>{plan.employee?.user.firstName} {plan.employee?.user.lastName}</strong><p>{plan.cycle.name} · {plan.status}</p><button className="button secondary" onClick={() => router.push(`/performance/${plan.id}`)}>Review</button></article>)}
+        <button className="button secondary" onClick={() => router.push('/performance/team')}>Open team review queue</button>
       </section>
-      <section className="card"><h2>Reports</h2><p>Performance reporting will be expanded in the reporting pass.</p></section>
+      <section className="card"><h2>Reports</h2><p>Administrative reporting is available to authorised users.</p>{user.roles.some(r => ['SYSTEM_ADMIN', 'PERFORMANCE_ADMIN', 'HR_ADMIN'].includes(r)) && <button className="button secondary" onClick={() => router.push('/admin/reports')}>Open reports</button>}</section>
     </div>
-    <button className="button secondary" onClick={() => { localStorage.removeItem('pms_token'); router.push('/login'); }}>Sign out</button>
+    <button className="button secondary" onClick={async () => { const token = localStorage.getItem('pms_token'); if (token) await fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined); localStorage.removeItem('pms_token'); router.push('/login'); }}>Sign out</button>
   </section></main>;
 }
