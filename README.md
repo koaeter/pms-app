@@ -38,6 +38,8 @@ Configurable electronic Performance Management System for public-sector organisa
 - Organisation administration UI at `/admin/organisation`.
 - User/role administration UI at `/admin/users`.
 - Audit log UI at `/admin/audit`.
+- Performance reporting API for organisation summaries and employee performance history.
+- Performance reporting UI at `/admin/reports`.
 
 ## Administration flow
 1. Create or select an organisation.
@@ -47,8 +49,9 @@ Configurable electronic Performance Management System for public-sector organisa
 5. Link users to employee records and assign managers.
 6. Configure a performance programme, review types, KPI/competency libraries and rating scales.
 7. Create performance cycles and then create employee performance plans.
+8. Review organisation performance through the reporting dashboard.
 
 ## Performance architecture
-A performance programme defines reusable rules and content for an organisation. A programme can contain multiple review types, KPI definitions and competency definitions. A cycle activates a programme for a defined period. An employee then receives a performance plan for that cycle/review type, containing weighted KPI and competency items. Assessments can subsequently be recorded by self, supervisor, reviewer and final assessors.
+A performance programme defines reusable rules and content for an organisation. A programme can contain multiple review types, KPI definitions and competency definitions. A cycle activates a programme for a defined period. An employee then receives a performance plan for that cycle/review type, containing weighted KPI and competency items. Assessments can subsequently be recorded by self, supervisor, reviewer and final assessors. Reporting aggregates plan status and approved final assessment results without changing the underlying performance records.
 
 The implementation is being built incrementally, with configuration and secrets kept outside source control.
