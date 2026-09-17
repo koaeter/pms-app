@@ -10,10 +10,11 @@ import { CycleWorkflowService } from './cycle-workflow.service';
 import { PerformanceDashboardController } from './performance-dashboard.controller';
 import { PerformanceDashboardService } from './performance-dashboard.service';
 import { AssessmentWorkflowService } from './assessment-workflow.service';
+import { PerformanceAssignmentService } from './performance-assignment.service';
 
 @Module({
   imports: [NotificationsModule],
   controllers: [PerformanceController, CycleWorkflowController, PerformanceDashboardController],
-  providers: [PerformanceService, PerformanceAccessService, CycleWorkflowService, PerformanceDashboardService, AssessmentWorkflowService, AuditService, PrismaService],
+  providers: [PerformanceService, PerformanceAccessService, CycleWorkflowService, PerformanceDashboardService, AssessmentWorkflowService, PerformanceAssignmentService, AuditService, PrismaService],
 })
 export class PerformanceModule {}
