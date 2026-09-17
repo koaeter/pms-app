@@ -41,6 +41,12 @@ export class AuthService {
     return { token, expiresAt, user: this.presentUser(user) };
   }
 
+  async logout(token: string) {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    await this.prisma.session.deleteMany({ where: { tokenHash } });
+    return { success: true };
+  }
+
   async currentUser(token: string) {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const session = await this.prisma.session.findUnique({
