@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [teamPlans, setTeamPlans] = useState<Plan[]>([]);
+  const [unread, setUnread] = useState(0);
   const [message, setMessage] = useState('');
 
   async function request(path: string) {
@@ -27,9 +28,10 @@ export default function Dashboard() {
       try {
         const me: User = await request('/auth/me');
         setUser(me);
-        const [myPlans, team] = await Promise.all([request('/performance/dashboard/me'), request('/performance/dashboard/team')]);
+        const [myPlans, team, count] = await Promise.all([request('/performance/dashboard/me'), request('/performance/dashboard/team'), request('/notifications/unread-count')]);
         setPlans(myPlans);
         setTeamPlans(team);
+        setUnread(count);
       } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load dashboard.'); }
     })();
   }, [router]);
@@ -43,6 +45,7 @@ export default function Dashboard() {
     <h1>Welcome, {user.firstName}</h1>
     <p>{user.username} · {user.roles.join(', ')}</p>
     {message && <p className="muted">{message}</p>}
+    <div className="actions"><button className="button secondary" onClick={() => router.push('/notifications')}>Notifications{unread ? ` (${unread})` : ''}</button></div>
     <div className="grid">
       <section className="card"><h2>My Performance</h2><p>{plans.length} performance plan{plans.length === 1 ? '' : 's'}.</p>
         {plans.slice(0, 6).map((plan) => <article className="card" key={plan.id}><strong>{plan.cycle.name}</strong><p>{plan.cycle.reviewType.name} · {plan.status}</p><button className="button" onClick={() => router.push(`/performance/${plan.id}`)}>Open performance record</button></article>)}
