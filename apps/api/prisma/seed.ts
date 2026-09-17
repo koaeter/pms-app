@@ -24,6 +24,7 @@ async function main() {
     { name: 'SYSTEM_ADMIN', description: 'Full system administration access', permissions: permissionCodes },
     { name: 'PERFORMANCE_ADMIN', description: 'Performance management administration and approval', permissions: ['organisation.read', 'performance.read', 'performance.manage', 'performance.assess', 'performance.approve', 'reports.read'] },
     { name: 'HR_ADMIN', description: 'Human resources and performance administration', permissions: ['organisation.read', 'organisation.manage', 'users.read', 'users.manage', 'performance.read', 'performance.manage', 'performance.assess', 'performance.approve', 'reports.read'] },
+    { name: 'PERFORMANCE_REVIEWER', description: 'Assigned performance reviewer/final assessor access', permissions: ['organisation.read', 'performance.read', 'performance.assess'] },
     { name: 'SUPERVISOR', description: 'Supervisor assessment access', permissions: ['organisation.read', 'performance.read', 'performance.assess'] },
     { name: 'EMPLOYEE', description: 'Employee self-assessment access', permissions: ['organisation.read', 'performance.read', 'performance.assess'] },
   ];
