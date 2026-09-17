@@ -76,6 +76,8 @@ model Employee {
   manager Employee? @relation("EmployeeManager", fields: [managerId], references: [id])
   reports Employee[] @relation("EmployeeManager")
   performancePlans PerformancePlan[]
+  reviewerPlans PerformancePlan[] @relation("PerformancePlanReviewer")
+  finalAssessorPlans PerformancePlan[] @relation("PerformancePlanFinalAssessor")
   assessmentsGiven PerformanceAssessment[] @relation("Assessor")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -252,10 +254,14 @@ model PerformancePlan {
   employeeId String
   cycleId String
   reviewTypeId String
+  reviewerId String?
+  finalAssessorId String?
   status PlanStatus @default(DRAFT)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   reviewType ReviewType @relation(fields: [reviewTypeId], references: [id])
+  reviewer Employee? @relation("PerformancePlanReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  finalAssessor Employee? @relation("PerformancePlanFinalAssessor", fields: [finalAssessorId], references: [id], onDelete: SetNull)
   items PerformancePlanItem[]
   assessments PerformanceAssessment[]
   createdAt DateTime @default(now())
@@ -263,6 +269,8 @@ model PerformancePlan {
   @@unique([employeeId, cycleId, reviewTypeId])
   @@index([cycleId])
   @@index([employeeId])
+  @@index([reviewerId])
+  @@index([finalAssessorId])
 }
 
 enum PlanStatus { DRAFT SUBMITTED IN_REVIEW APPROVED LOCKED }
