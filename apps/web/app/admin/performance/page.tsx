@@ -7,6 +7,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 type Programme = { id: string; name: string; code: string; description?: string | null; _count: { cycles: number; kpis: number; competencies: number } };
 type ReviewType = { id: string; name: string; code: string; description?: string | null };
 type Cycle = { id: string; name: string; startsAt: string; endsAt: string; status: string; programme: { name: string }; reviewType: { name: string } };
+type Employee = { id: string; employeeNumber: string; user: { firstName: string; lastName: string; isActive: boolean }; department?: { name: string } | null; designation?: { name: string; grade?: string | null } | null };
 type LibraryItem = { id: string; name: string; code: string; description?: string | null; defaultWeight?: string | number | null };
 type Scale = { id: string; name: string; description?: string | null; levels: Array<{ id: string; name: string; score: string | number; description?: string | null }> };
 
@@ -25,6 +26,8 @@ export default function PerformanceAdmin() {
   const [competencies, setCompetencies] = useState<LibraryItem[]>([]);
   const [scales, setScales] = useState<Scale[]>([]);
   const [message, setMessage] = useState('');
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [planForm, setPlanForm] = useState({ cycleId: '', employeeId: '', reviewTypeId: '' });
   const [programmeForm, setProgrammeForm] = useState({ name: '', code: '', description: '' });
   const [reviewForm, setReviewForm] = useState({ name: '', code: '', description: '' });
   const [cycleForm, setCycleForm] = useState({ name: '', reviewTypeId: '', startsAt: '', endsAt: '' });
@@ -35,16 +38,17 @@ export default function PerformanceAdmin() {
   async function loadAll(id = organisationId) {
     if (!id) return;
     localStorage.setItem('pms_organisation_id', id);
-    const [p, c, s] = await Promise.all([request(`/performance/organisations/${id}/programmes`), request(`/performance/organisations/${id}/cycles`), request(`/performance/organisations/${id}/rating-scales`)]);
+    const [p, c, s, e] = await Promise.all([request(`/performance/organisations/${id}/programmes`), request(`/performance/organisations/${id}/cycles`), request(`/performance/organisations/${id}/rating-scales`), request(`/organisation/${id}/employees`)]);
     if (p.ok) { const data = await p.json(); setProgrammes(data); if (!programmeId && data[0]) setProgrammeId(data[0].id); }
     if (c.ok) setCycles(await c.json());
     if (s.ok) setScales(await s.json());
+    if (e.ok) { const data = await e.json(); setEmployees(data.filter((x: Employee) => x.user.isActive)); }
   }
 
   async function loadProgramme(id: string) {
     if (!id) return;
     const [r, k, c] = await Promise.all([request(`/performance/programmes/${id}/review-types`), request(`/performance/programmes/${id}/kpis`), request(`/performance/programmes/${id}/competencies`)]);
-    if (r.ok) { const data = await r.json(); setReviewTypes(data); setCycleForm(f => ({ ...f, reviewTypeId: data[0]?.id ?? '' })); }
+    if (r.ok) { const data = await r.json(); setReviewTypes(data); setCycleForm(f => ({ ...f, reviewTypeId: data[0]?.id ?? '' })); setPlanForm(f => ({ ...f, reviewTypeId: data[0]?.id ?? '' })); }
     if (k.ok) setKpis(await k.json());
     if (c.ok) setCompetencies(await c.json());
   }
@@ -85,6 +89,26 @@ export default function PerformanceAdmin() {
       </>}
 
       <div className="card"><h2>Rating scales</h2><form className="form" onSubmit={e => { e.preventDefault(); submit(`/performance/organisations/${organisationId}/rating-scales`, { name: scaleForm.name, description: scaleForm.description, levels: scaleForm.levels.map(x => ({ ...x, score: Number(x.score) })) }, 'Rating scale created.', () => setScaleForm({ name: '', description: '', levels: [{ name: '', score: '' }] })); }}><label>Name<input value={scaleForm.name} onChange={e => setScaleForm({ ...scaleForm, name: e.target.value })} required /></label><label>Description<input value={scaleForm.description} onChange={e => setScaleForm({ ...scaleForm, description: e.target.value })} /></label>{scaleForm.levels.map((level, index) => <div className="actions" key={index}><input placeholder="Level name" value={level.name} onChange={e => setScaleForm(f => ({ ...f, levels: f.levels.map((x, i) => i === index ? { ...x, name: e.target.value } : x) }))} required /><input placeholder="Score" type="number" step="0.01" value={level.score} onChange={e => setScaleForm(f => ({ ...f, levels: f.levels.map((x, i) => i === index ? { ...x, score: e.target.value } : x) }))} required /><button type="button" className="button secondary" onClick={() => removeLevel(index)} disabled={scaleForm.levels.length === 1}>Remove</button></div>)}<div className="actions"><button type="button" className="button secondary" onClick={addLevel}>Add level</button><button className="button">Create rating scale</button></div></form><div className="grid">{scales.map(s => <article key={s.id}><h3>{s.name}</h3><p>{s.levels.map(l => `${l.name} (${l.score})`).join(' · ')}</p></article>)}</div></div>
+
+      <div className="card"><h2>Performance plans</h2>
+        <p>Create a plan for an employee after configuring the cycle and review type. Plan items can then be added from the employee's performance workspace.</p>
+        <form className="form" onSubmit={async e => {
+          e.preventDefault();
+          const response = await request(`/performance/cycles/${planForm.cycleId}/plans`, { method: 'POST', body: JSON.stringify({ employeeId: planForm.employeeId, reviewTypeId: planForm.reviewTypeId }) });
+          if (!response.ok) { setMessage(await response.text()); return; }
+          setMessage('Performance plan created.');
+          setPlanForm(f => ({ ...f, employeeId: '' }));
+        }}>
+          <label>Cycle<select value={planForm.cycleId} onChange={e => {
+            const cycleId = e.target.value;
+            const cycle = cycles.find(c => c.id === cycleId);
+            setPlanForm(f => ({ ...f, cycleId, reviewTypeId: cycle ? reviewTypes.find(r => r.name === cycle.reviewType.name)?.id ?? f.reviewTypeId : f.reviewTypeId }));
+          }} required><option value="">Select cycle…</option>{cycles.map(c => <option key={c.id} value={c.id}>{c.name} · {c.reviewType.name} · {c.status}</option>)}</select></label>
+          <label>Employee<select value={planForm.employeeId} onChange={e => setPlanForm({ ...planForm, employeeId: e.target.value })} required><option value="">Select employee…</option>{employees.map(e => <option key={e.id} value={e.id}>{e.user.firstName} {e.user.lastName} · {e.employeeNumber}</option>)}</select></label>
+          <label>Review type<select value={planForm.reviewTypeId} onChange={e => setPlanForm({ ...planForm, reviewTypeId: e.target.value })} required><option value="">Select review type…</option>{reviewTypes.map(r => <option key={r.id} value={r.id}>{r.name} ({r.code})</option>)}</select></label>
+          <button className="button" disabled={!planForm.cycleId || !planForm.employeeId || !planForm.reviewTypeId}>Create performance plan</button>
+        </form>
+      </div>
 
       <div className="card"><h2>Cycles</h2>{cycles.length ? <ul>{cycles.map(c => <li key={c.id}><strong>{c.name}</strong> · {c.programme.name} · {c.reviewType.name} · {c.status} · {new Date(c.startsAt).toLocaleDateString()} – {new Date(c.endsAt).toLocaleDateString()}</li>)}</ul> : <p className="muted">No performance cycles configured.</p>}</div>
     </>}
