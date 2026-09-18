@@ -8,7 +8,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 type PlanItem = { id: string; type: 'KPI' | 'COMPETENCY'; description?: string | null; weight: number | string; target?: string | null; kpi?: { name: string } | null; competency?: { name: string } | null };
 type RatingScale = { id: string; name: string; levels: { id: string; name: string; score: number | string; description?: string | null }[] };
 type Assessment = { id: string; assessorType: string; status: string; overallScore?: number | string | null; comment?: string | null; assessor?: { user?: { firstName: string; lastName: string } }; items?: { planItemId: string; ratingLevelId: string; comment?: string | null }[] };
-type Plan = { id: string; status: string; employeeId: string; employee: { user: { id: string; firstName: string; lastName: string }; managerId?: string | null; department?: { name: string } | null; designation?: { name: string } | null }; cycle: { name: string; organisationId: string; startsAt: string; endsAt: string; programme: { name: string }; reviewType: { name: string } }; items: PlanItem[]; assessments: Assessment[] };
+type Assignee = { id: string; user?: { id: string; firstName: string; lastName: string; username?: string } };
+type Plan = { id: string; status: string; employeeId: string; reviewerId?: string | null; finalAssessorId?: string | null; reviewer?: Assignee | null; finalAssessor?: Assignee | null; employee: { user: { id: string; firstName: string; lastName: string }; managerId?: string | null; department?: { name: string } | null; designation?: { name: string } | null }; cycle: { name: string; organisationId: string; startsAt: string; endsAt: string; programme: { name: string }; reviewType: { name: string } }; items: PlanItem[]; assessments: Assessment[] };
 type User = { id: string; roles: string[]; firstName: string };
 
 export default function PerformanceWorkspace() {
@@ -54,8 +55,8 @@ export default function PerformanceWorkspace() {
     if (!plan || !user) return null;
     if (!submitted.has('SELF') && plan.employee.user.id === user.id) return 'SELF';
     if (!submitted.has('SUPERVISOR') && submitted.has('SELF') && plan.employee.managerId === user.id) return 'SUPERVISOR';
-    if (!submitted.has('REVIEWER') && submitted.has('SUPERVISOR') && admin) return 'REVIEWER';
-    if (!submitted.has('FINAL') && submitted.has('REVIEWER') && admin) return 'FINAL';
+    if (!submitted.has('REVIEWER') && submitted.has('SUPERVISOR') && plan.reviewer?.user?.id === user.id) return 'REVIEWER';
+    if (!submitted.has('FINAL') && submitted.has('REVIEWER') && plan.finalAssessor?.user?.id === user.id) return 'FINAL';
     return null;
   }, [plan, user, submitted, admin]);
 
@@ -118,7 +119,7 @@ export default function PerformanceWorkspace() {
     {plan.status === 'DRAFT' && <div className="card"><h2>Performance plan</h2><p>Add/configure plan items from the administration area before submitting.</p><button className="button" disabled={busy} onClick={submitPlan}>Submit plan</button></div>}
 
     <div className="card"><h2>Workflow</h2><div className="grid">
-      {['SELF','SUPERVISOR','REVIEWER','FINAL'].map((stage) => { const assessment = plan.assessments.find((a) => a.assessorType === stage); return <div className="card" key={stage}><strong>{stage}</strong><p>{assessment ? `${assessment.status}${assessment.overallScore != null ? ` · ${Number(assessment.overallScore).toFixed(1)}%` : ''}` : 'PENDING'}</p>{assessment?.assessor?.user && <small>{assessment.assessor.user.firstName} {assessment.assessor.user.lastName}</small>}</div>; })}
+      {['SELF','SUPERVISOR','REVIEWER','FINAL'].map((stage) => { const assessment = plan.assessments.find((a) => a.assessorType === stage); const assigned = stage === 'REVIEWER' ? plan.reviewer : stage === 'FINAL' ? plan.finalAssessor : null; return <div className="card" key={stage}><strong>{stage}</strong><p>{assessment ? `${assessment.status}${assessment.overallScore != null ? ` · ${Number(assessment.overallScore).toFixed(1)}%` : ''}` : 'PENDING'}</p>{assigned?.user && <small>Assigned: {assigned.user.firstName} {assigned.user.lastName}</small>}{assessment?.assessor?.user && <small> · Completed by {assessment.assessor.user.firstName} {assessment.assessor.user.lastName}</small>}</div>; })}
     </div></div>
 
     {canEdit && <div className="card"><h2>{assessorType} assessment</h2><p>Rate every item using the organisation's rating scale. Scores are normalised to 100 and weighted by the performance plan.</p>
