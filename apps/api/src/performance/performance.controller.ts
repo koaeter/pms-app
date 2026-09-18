@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { AuditService } from '../audit.service';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma.service';
 import { PerformanceAccessService } from './performance-access.service';
 import { AssessmentWorkflowService } from './assessment-workflow.service';
 import { PerformanceAssignmentService } from './performance-assignment.service';
@@ -16,6 +17,7 @@ export class PerformanceController {
     private readonly workflow: AssessmentWorkflowService,
     private readonly assignments: PerformanceAssignmentService,
     private readonly notifications: NotificationsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get('organisations/:organisationId/programmes') @RequirePermissions('performance.read')
@@ -132,6 +134,17 @@ export class PerformanceController {
       `/performance/${planId}`,
     )));
     return result;
+  }
+
+  private async prismaAdminRecipients(organisationId: string | null) {
+    if (!organisationId) return [];
+    const employees = await this.prisma.employee.findMany({
+      where: { organisationId, user: { isActive: true } },
+      include: { user: { include: { roles: { include: { role: true } } } } },
+    });
+    return employees
+      .filter(({ user }) => user.roles.some(({ role }) => ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)))
+      .map(({ user }) => user.id);
   }
 
   @Post('plans/:planId/approve') @RequirePermissions('performance.approve')
