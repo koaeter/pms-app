@@ -160,6 +160,24 @@ export class PerformanceService {
     return this.prisma.performancePlanItem.create({ data });
   }
 
+  async updatePlanItem(data: { itemId: string; description?: string; weight: number; target?: string }) {
+    const item = await this.prisma.performancePlanItem.findUnique({ where: { id: data.itemId }, include: { plan: true } });
+    if (!item) throw new NotFoundException('Performance plan item not found');
+    if (item.plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be changed');
+    if (!Number.isFinite(data.weight) || data.weight <= 0 || data.weight > 100) throw new BadRequestException('Item weight must be greater than 0 and no more than 100');
+    return this.prisma.performancePlanItem.update({
+      where: { id: data.itemId },
+      data: { description: data.description, weight: data.weight, target: data.target },
+    });
+  }
+
+  async removePlanItem(itemId: string) {
+    const item = await this.prisma.performancePlanItem.findUnique({ where: { id: itemId }, include: { plan: true } });
+    if (!item) throw new NotFoundException('Performance plan item not found');
+    if (item.plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be changed');
+    return this.prisma.performancePlanItem.delete({ where: { id: itemId } });
+  }
+
   async submitPlan(planId: string) {
     const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, include: { items: true } });
     if (!plan) throw new NotFoundException('Performance plan not found');
