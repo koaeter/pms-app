@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { AuditService } from '../audit.service';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -76,6 +76,31 @@ export class PerformanceController {
   async addPlanItem(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { type: 'KPI' | 'COMPETENCY'; kpiId?: string; competencyId?: string; description?: string; weight: number; target?: string }) {
     await this.access.requirePlanManagement(planId, request.user);
     return this.service.addPlanItem({ ...body, planId });
+  }
+
+  @Patch('plans/:planId/items/:itemId') @RequirePermissions('performance.manage')
+  async updatePlanItem(
+    @Param('planId') planId: string,
+    @Param('itemId') itemId: string,
+    @Req() request: { user: any },
+    @Body() body: { description?: string; weight: number; target?: string },
+  ) {
+    await this.access.requirePlanManagement(planId, request.user);
+    const item = await this.service.getPlan(planId);
+    if (!item.items.some((planItem) => planItem.id === itemId)) throw new Error('Performance plan item does not belong to this plan');
+    return this.service.updatePlanItem({ itemId, ...body });
+  }
+
+  @Delete('plans/:planId/items/:itemId') @RequirePermissions('performance.manage')
+  async removePlanItem(
+    @Param('planId') planId: string,
+    @Param('itemId') itemId: string,
+    @Req() request: { user: any },
+  ) {
+    await this.access.requirePlanManagement(planId, request.user);
+    const plan = await this.service.getPlan(planId);
+    if (!plan.items.some((item) => item.id === itemId)) throw new Error('Performance plan item does not belong to this plan');
+    return this.service.removePlanItem(itemId);
   }
 
   @Post('plans/:planId/submit') @RequirePermissions('performance.manage')
