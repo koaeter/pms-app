@@ -40,6 +40,8 @@ export default function PerformanceAdmin() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [itemForm, setItemForm] = useState({ type: 'KPI' as 'KPI' | 'COMPETENCY', kpiId: '', competencyId: '', description: '', weight: '', target: '' });
   const [itemEdits, setItemEdits] = useState<Record<string, { description: string; weight: string; target: string }>>({});
+  const selectedPlanWeight = selectedPlan?.items.reduce((sum, item) => sum + Number(itemEdits[item.id]?.weight ?? item.weight), 0) ?? 0;
+  const planReadyToSubmit = !!selectedPlan && selectedPlan.status === 'DRAFT' && selectedPlan.items.length > 0 && Math.abs(selectedPlanWeight - 100) <= 0.01;
   const [programmeForm, setProgrammeForm] = useState({ name: '', code: '', description: '' });
   const [reviewForm, setReviewForm] = useState({ name: '', code: '', description: '' });
   const [cycleForm, setCycleForm] = useState({ name: '', reviewTypeId: '', startsAt: '', endsAt: '' });
@@ -150,6 +152,15 @@ export default function PerformanceAdmin() {
         {selectedPlan && <div className="card">
           <h3>{selectedPlan.employee.user.firstName} {selectedPlan.employee.user.lastName}</h3>
           <p className="muted">{selectedPlan.employee.employeeNumber} · {selectedPlan.reviewType.name} · Status: {selectedPlan.status}</p>
+          <div className="actions">
+            <strong>Weight total: {selectedPlanWeight.toFixed(2)}%</strong>
+            {selectedPlan.status === 'DRAFT' && <span className="muted">{selectedPlan.items.length === 0 ? 'Add at least one item.' : planReadyToSubmit ? 'Ready for submission.' : 'Weights must total exactly 100%.'}</span>}
+            {selectedPlan.status === 'DRAFT' && <button className="button" disabled={!planReadyToSubmit} onClick={async () => {
+              const response = await request(`/performance/plans/${selectedPlan.id}/submit`, { method: 'POST' });
+              setMessage(response.ok ? 'Performance plan submitted.' : await response.text());
+              if (response.ok) { await loadPlan(selectedPlan.id); await loadPlans(planForm.cycleId); }
+            }}>Submit plan</button>}
+          </div>
           {selectedPlan.items.length ? <div>{selectedPlan.items.map(item => {
             const edit = itemEdits[item.id] ?? { description: item.description ?? '', weight: String(item.weight), target: item.target ?? '' };
             return <div className="card" key={item.id}>
