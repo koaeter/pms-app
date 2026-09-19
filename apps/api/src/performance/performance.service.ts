@@ -140,7 +140,12 @@ export class PerformanceService {
     if (!employee.organisationId || employee.organisationId !== cycle.organisationId) throw new BadRequestException('Employee does not belong to the cycle organisation');
     const reviewType = await this.prisma.reviewType.findFirst({ where: { id: data.reviewTypeId, programmeId: cycle.programmeId } });
     if (!reviewType) throw new NotFoundException('Review type does not belong to this cycle programme');
-    return this.prisma.performancePlan.create({ data });
+    try {
+      return await this.prisma.performancePlan.create({ data });
+    } catch (error: any) {
+      if (error?.code === 'P2002') throw new BadRequestException('A performance plan already exists for this employee, cycle, and review type');
+      throw error;
+    }
   }
 
   async addPlanItem(data: { planId: string; type: 'KPI' | 'COMPETENCY'; kpiId?: string; competencyId?: string; description?: string; weight: number; target?: string }) {
