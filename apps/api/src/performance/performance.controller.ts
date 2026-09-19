@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { AuditService } from '../audit.service';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -87,7 +87,7 @@ export class PerformanceController {
   ) {
     await this.access.requirePlanManagement(planId, request.user);
     const item = await this.service.getPlan(planId);
-    if (!item.items.some((planItem) => planItem.id === itemId)) throw new Error('Performance plan item does not belong to this plan');
+    if (!item.items.some((planItem) => planItem.id === itemId)) throw new BadRequestException('Performance plan item does not belong to this plan');
     return this.service.updatePlanItem({ itemId, ...body });
   }
 
