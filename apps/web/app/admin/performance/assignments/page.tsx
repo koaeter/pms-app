@@ -14,7 +14,6 @@ type Plan = {
 };
 
 type Assignment = { reviewerId?: string | null; finalAssessorId?: string | null };
-type Workflow = { self: string; supervisor: string; reviewer: string; final: string; approval: string };
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('pms_token');
@@ -34,7 +33,6 @@ export default function PerformanceAssignments() {
   const [reviewerId, setReviewerId] = useState('');
   const [finalAssessorId, setFinalAssessorId] = useState('');
   const [message, setMessage] = useState('');
-  const [workflow, setWorkflow] = useState<Workflow | null>(null);
 
   async function loadOrganisation(id: string) {
     if (!id) return;
@@ -69,7 +67,6 @@ export default function PerformanceAssignments() {
     const plan = await response.json();
     setReviewerId(plan.reviewerId ?? '');
     setFinalAssessorId(plan.finalAssessorId ?? '');
-    setWorkflow(plan.assessments ? null : null);
   }
 
   useEffect(() => {
