@@ -197,7 +197,12 @@ model PerformanceCycle {
   @@index([reviewTypeId])
 }
 
-enum CycleStatus { DRAFT OPEN REVIEW CLOSED }
+enum CycleStatus {
+  DRAFT
+  OPEN
+  REVIEW
+  CLOSED
+}
 
 model Kpi {
   id String @id @default(uuid())
@@ -273,10 +278,31 @@ model PerformancePlan {
   @@index([finalAssessorId])
 }
 
-enum PlanStatus { DRAFT SUBMITTED IN_REVIEW APPROVED LOCKED }
-enum PlanItemType { KPI COMPETENCY }
-enum AssessorType { SELF SUPERVISOR REVIEWER FINAL }
-enum AssessmentStatus { DRAFT SUBMITTED APPROVED }
+enum PlanStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  LOCKED
+}
+
+enum PlanItemType {
+  KPI
+  COMPETENCY
+}
+
+enum AssessorType {
+  SELF
+  SUPERVISOR
+  REVIEWER
+  FINAL
+}
+
+enum AssessmentStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
 
 model PerformancePlanItem {
   id String @id @default(uuid())
