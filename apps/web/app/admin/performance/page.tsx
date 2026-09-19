@@ -15,6 +15,8 @@ type Plan = {
   status: string;
   employee: { employeeNumber: string; user: { firstName: string; lastName: string }; department?: { name: string } | null; designation?: { name: string; grade?: string | null } | null };
   reviewType: { name: string };
+  reviewer?: { id: string; user: { firstName: string; lastName: string } } | null;
+  finalAssessor?: { id: string; user: { firstName: string; lastName: string } } | null;
   items: Array<{ id: string; type: 'KPI' | 'COMPETENCY'; kpi?: { name: string; code: string } | null; competency?: { name: string; code: string } | null; description?: string | null; weight: string | number; target?: string | null }>;
 };
 
@@ -152,6 +154,7 @@ export default function PerformanceAdmin() {
         {selectedPlan && <div className="card">
           <h3>{selectedPlan.employee.user.firstName} {selectedPlan.employee.user.lastName}</h3>
           <p className="muted">{selectedPlan.employee.employeeNumber} · {selectedPlan.reviewType.name} · Status: {selectedPlan.status}</p>
+          <p className="muted">Reviewer: {selectedPlan.reviewer ? selectedPlan.reviewer.user.firstName + ' ' + selectedPlan.reviewer.user.lastName : 'Unassigned'} · Final assessor: {selectedPlan.finalAssessor ? selectedPlan.finalAssessor.user.firstName + ' ' + selectedPlan.finalAssessor.user.lastName : 'Unassigned'}</p>
           <div className="actions">
             <strong>Weight total: {selectedPlanWeight.toFixed(2)}%</strong>
             {selectedPlan.status === 'DRAFT' && <span className="muted">{selectedPlan.items.length === 0 ? 'Add at least one item.' : planReadyToSubmit ? 'Ready for submission.' : 'Weights must total exactly 100%.'}</span>}
