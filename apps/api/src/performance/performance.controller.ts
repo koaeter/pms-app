@@ -99,7 +99,7 @@ export class PerformanceController {
   ) {
     await this.access.requirePlanManagement(planId, request.user);
     const plan = await this.service.getPlan(planId);
-    if (!plan.items.some((item) => item.id === itemId)) throw new Error('Performance plan item does not belong to this plan');
+    if (!plan.items.some((item) => item.id === itemId)) throw new BadRequestException('Performance plan item does not belong to this plan');
     return this.service.removePlanItem(itemId);
   }
 
@@ -147,14 +147,20 @@ export class PerformanceController {
     await this.audit.record('PERFORMANCE_ASSESSMENT_SUBMITTED', 'PerformancePlan', planId, request.user.id, { assessorType: body.assessorType });
 
     const plan = await this.service.getPlan(planId);
-    const recipients = body.assessorType === 'SELF' && plan.employee.manager
-      ? [plan.employee.manager.userId]
-      : body.assessorType === 'SUPERVISOR'
-        ? [plan.employee.user.id]
-        : [];
-    await Promise.all(recipients.map((userId) => this.notifications.notify(
+    let recipients: string[] = [];
+    if (body.assessorType === 'SELF' && plan.employee.manager) {
+      recipients = [plan.employee.manager.userId];
+    } else if (body.assessorType === 'SUPERVISOR' && plan.reviewer?.user?.id) {
+      recipients = [plan.reviewer.user.id];
+    } else if (body.assessorType === 'REVIEWER' && plan.finalAssessor?.user?.id) {
+      recipients = [plan.finalAssessor.user.id];
+    } else if (body.assessorType === 'FINAL') {
+      recipients = await this.prismaAdminRecipients(plan.cycle.organisationId);
+    }
+    const uniqueRecipients = [...new Set(recipients.filter((userId) => userId !== request.user.id))];
+    await Promise.all(uniqueRecipients.map((userId) => this.notifications.notify(
       userId,
-      'Performance assessment submitted',
+      body.assessorType === 'FINAL' ? 'Performance assessment ready for approval' : 'Performance assessment submitted',
       `${body.assessorType} assessment for ${plan.employee.user.firstName} ${plan.employee.user.lastName} has been submitted.`,
       `/performance/${planId}`,
     )));
