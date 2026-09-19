@@ -14,6 +14,7 @@ type Plan = {
 };
 
 type Assignment = { reviewerId?: string | null; finalAssessorId?: string | null };
+type Workflow = { self: string; supervisor: string; reviewer: string; final: string; approval: string };
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('pms_token');
@@ -33,6 +34,7 @@ export default function PerformanceAssignments() {
   const [reviewerId, setReviewerId] = useState('');
   const [finalAssessorId, setFinalAssessorId] = useState('');
   const [message, setMessage] = useState('');
+  const [workflow, setWorkflow] = useState<Workflow | null>(null);
 
   async function loadOrganisation(id: string) {
     if (!id) return;
@@ -67,6 +69,7 @@ export default function PerformanceAssignments() {
     const plan = await response.json();
     setReviewerId(plan.reviewerId ?? '');
     setFinalAssessorId(plan.finalAssessorId ?? '');
+    setWorkflow(plan.assessments ? null : null);
   }
 
   useEffect(() => {
@@ -125,7 +128,17 @@ export default function PerformanceAssignments() {
         </div>
       </div>}
 
-      {planId && <div className="card"><button className="button" onClick={save}>Save assignments</button></div>}
+      {planId && <div className="card">
+        <h2>Workflow</h2>
+        <p className="muted">Assignment controls determine who can enter the reviewer and final assessment stages.</p>
+        <div className="actions">
+          <span>Self: pending until employee submits</span>
+          <span>Supervisor: follows self assessment</span>
+          <span>Reviewer: {reviewerId ? 'Assigned' : 'Unassigned'}</span>
+          <span>Final: {finalAssessorId ? 'Assigned' : 'Unassigned'}</span>
+        </div>
+        <button className="button" onClick={save}>Save assignments</button>
+      </div>
     </>}
   </section></main>;
 }
