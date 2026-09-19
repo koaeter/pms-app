@@ -26,6 +26,21 @@ jobs:
       - name: Generate lockfile
         run: pnpm install --lockfile-only
 
+      - name: Install from generated lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
+      - name: API typecheck
+        run: pnpm typecheck
+
+      - name: API unit tests
+        run: pnpm test
+
+      - name: Build all applications
+        run: pnpm build
+
       - name: Commit lockfile
         run: |
           if git diff --quiet -- pnpm-lock.yaml; then
