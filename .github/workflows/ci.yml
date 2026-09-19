@@ -24,7 +24,7 @@ jobs:
           node-version: 24
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
         run: pnpm db:generate
