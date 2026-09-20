@@ -39,8 +39,11 @@ function service(planOverrides: Record<string, unknown> = {}, candidates: unknow
     },
     employee: {
       findMany: async () => candidates,
-      findUnique: async ({ where }: { where: { userId: string } }) =>
-        where.userId === 'reviewer-user' ? employee('reviewer-1') : null,
+      findUnique: async ({ where }: { where: { userId: string } }) => {
+        if (where.userId === 'reviewer-user') return employee('reviewer-1');
+        if (where.userId === 'other-user') return employee('other-1');
+        return null;
+      },
     },
   } as any;
 
