@@ -7,7 +7,7 @@ const plan = {
   id: 'plan-1',
   employee: {
     organisationId: 'org-a',
-    userId: 'employee-1',
+    userId: 'employee-user',
     managerId: 'manager-1',
     user: { id: 'employee-user' },
     manager: { userId: 'manager-user' },
