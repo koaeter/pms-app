@@ -46,6 +46,13 @@ test('final assessment requires submitted reviewer assessment', async () => {
   );
 });
 
+test('draft cycles reject assessments', async () => {
+  await assert.rejects(
+    () => service('DRAFT', 'SUBMITTED', []).assertCanAssess('plan-1', 'SELF'),
+    /only available during an open or review cycle/i,
+  );
+});
+
 test('closed cycles reject assessments', async () => {
   await assert.rejects(
     () => service('CLOSED', 'SUBMITTED', []).assertCanAssess('plan-1', 'SELF'),
