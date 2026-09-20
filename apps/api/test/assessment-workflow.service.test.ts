@@ -56,7 +56,7 @@ test('draft cycles reject assessments', async () => {
 test('closed cycles reject assessments', async () => {
   await assert.rejects(
     () => service('CLOSED', 'SUBMITTED', []).assertCanAssess('plan-1', 'SELF'),
-    /cycle is closed/,
+    /only available during an open or review cycle/i,
   );
 });
 
