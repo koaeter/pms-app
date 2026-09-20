@@ -11,7 +11,7 @@ export class AssessmentWorkflowService {
       include: { cycle: true, assessments: true },
     });
     if (!plan) throw new BadRequestException('Performance plan not found');
-    if (plan.cycle.status === 'CLOSED') throw new BadRequestException('This performance cycle is closed');
+    if (plan.cycle.status !== 'OPEN' && plan.cycle.status !== 'REVIEW') throw new BadRequestException('Performance assessments are only available during an open or review cycle');
     if (plan.status === 'APPROVED' || plan.status === 'LOCKED') throw new BadRequestException('This performance plan is already finalised');
 
     const submitted = (type: string) => plan.assessments.some((a) => a.assessorType === type && a.status !== 'DRAFT');
