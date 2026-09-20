@@ -119,7 +119,7 @@ export class PerformanceService {
         employee: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } }, department: true, designation: true, manager: true } },
         reviewer: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         finalAssessor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
-        cycle: { include: { programme: true, reviewType: true } },
+        cycle: { include: { programme: true, reviewType: true, ratingScale: { include: { levels: true } } } },
         reviewType: true,
         items: { include: { kpi: true, competency: true } },
         assessments: {
