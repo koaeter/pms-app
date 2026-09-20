@@ -7,7 +7,7 @@ function service(organisationId = 'org-a') {
   return new ReportsService({
     organisation: {
       findUnique: async ({ where }: any) =>
-        where.id === organisationId ? { id: organisationId, name: 'Org A', code: 'A' } : null,
+        where.id === organisationId || where.id === 'org-b' ? { id: where.id, name: 'Org', code: where.id.toUpperCase() } : null,
     },
     performanceCycle: { findMany: async () => [] },
     performancePlan: { findMany: async () => [] },
