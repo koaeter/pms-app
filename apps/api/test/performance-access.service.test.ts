@@ -110,5 +110,5 @@ test('visible-plan filtering limits ordinary users to themselves and direct repo
     organisationId: 'org-a',
     roles: ['SUPERVISOR'],
   });
-  assert.deepEqual(result, [plans[1]]);
+  assert.deepEqual(result, [plans[0], plans[1]]);
 });
