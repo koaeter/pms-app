@@ -38,16 +38,20 @@ export class PerformanceService {
     return this.prisma.performanceCycle.findMany({
       where: { organisationId },
       orderBy: { startsAt: 'desc' },
-      include: { programme: true, reviewType: true },
+      include: { programme: true, reviewType: true, ratingScale: true },
     });
   }
 
-  async createCycle(data: { organisationId: string; programmeId: string; reviewTypeId: string; name: string; startsAt: string; endsAt: string }) {
+  async createCycle(data: { organisationId: string; programmeId: string; reviewTypeId: string; ratingScaleId?: string; name: string; startsAt: string; endsAt: string }) {
     await this.requireOrganisation(data.organisationId);
     const programme = await this.requireProgramme(data.programmeId);
     if (programme.organisationId !== data.organisationId) throw new BadRequestException('Programme does not belong to this organisation');
     const reviewType = await this.prisma.reviewType.findFirst({ where: { id: data.reviewTypeId, programmeId: programme.id } });
     if (!reviewType) throw new NotFoundException('Review type not found in this programme');
+    if (data.ratingScaleId) {
+      const ratingScale = await this.prisma.ratingScale.findFirst({ where: { id: data.ratingScaleId, organisationId: data.organisationId } });
+      if (!ratingScale) throw new NotFoundException('Rating scale not found in this organisation');
+    }
     const startsAt = new Date(data.startsAt);
     const endsAt = new Date(data.endsAt);
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
@@ -184,9 +188,10 @@ export class PerformanceService {
   }
 
   async submitPlan(planId: string) {
-    const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, include: { items: true } });
+    const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, include: { items: true, cycle: { include: { ratingScale: { include: { levels: true } } } } } });
     if (!plan) throw new NotFoundException('Performance plan not found');
     if (plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be submitted');
+    if (plan.cycle.status !== 'OPEN') throw new BadRequestException('Plans can only be submitted while the performance cycle is open');
     if (plan.items.length === 0) throw new BadRequestException('A performance plan must contain at least one item');
     const totalWeight = plan.items.reduce((sum, item) => sum + Number(item.weight), 0);
     if (Math.abs(totalWeight - 100) > 0.01) throw new BadRequestException(`Plan item weights must total 100%; current total is ${totalWeight.toFixed(2)}%`);
@@ -213,8 +218,9 @@ export class PerformanceService {
       throw new BadRequestException('Each performance plan item can only be rated once');
     }
 
-    const ratingLevels = await this.prisma.ratingLevel.findMany({ where: { id: { in: data.items.map((item) => item.ratingLevelId) } }, include: { scale: true } });
-    if (ratingLevels.length !== data.items.length) throw new BadRequestException('One or more rating levels could not be found');
+    if (!plan.cycle.ratingScaleId || !plan.cycle.ratingScale) throw new BadRequestException('A rating scale must be configured for this performance cycle before assessment');
+    const ratingLevels = await this.prisma.ratingLevel.findMany({ where: { id: { in: data.items.map((item) => item.ratingLevelId) }, scaleId: plan.cycle.ratingScaleId }, include: { scale: true } });
+    if (ratingLevels.length !== data.items.length) throw new BadRequestException('One or more ratings do not belong to the cycle rating scale');
     const scaleIds = [...new Set(ratingLevels.map((level) => level.scaleId))];
     const scales = await this.prisma.ratingScale.findMany({ where: { id: { in: scaleIds } }, include: { levels: true } });
     if (scales.some((scale) => scale.organisationId !== plan.cycle.organisationId)) throw new BadRequestException('Rating scale does not belong to the cycle organisation');
