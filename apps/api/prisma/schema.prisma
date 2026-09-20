@@ -182,6 +182,7 @@ model PerformanceCycle {
   organisationId String
   programmeId String
   reviewTypeId String
+  ratingScaleId String?
   name String
   startsAt DateTime
   endsAt DateTime
@@ -189,12 +190,14 @@ model PerformanceCycle {
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   programme PerformanceProgramme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
   reviewType ReviewType @relation(fields: [reviewTypeId], references: [id])
+  ratingScale RatingScale? @relation(fields: [ratingScaleId], references: [id])
   plans PerformancePlan[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([organisationId])
   @@index([programmeId])
   @@index([reviewTypeId])
+  @@index([ratingScaleId])
 }
 
 enum CycleStatus {
@@ -238,6 +241,7 @@ model RatingScale {
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   levels RatingLevel[]
   assessmentItems PerformanceAssessmentItem[]
+  cycles PerformanceCycle[]
   @@unique([organisationId, name])
   @@index([organisationId])
 }
