@@ -6,7 +6,7 @@ import Link from 'next/link';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 type Programme = { id: string; name: string; code: string; description?: string | null; _count: { cycles: number; kpis: number; competencies: number } };
 type ReviewType = { id: string; name: string; code: string; description?: string | null };
-type Cycle = { id: string; name: string; startsAt: string; endsAt: string; status: string; programme: { name: string }; reviewType: { name: string } };
+type Cycle = { id: string; name: string; startsAt: string; endsAt: string; status: string; ratingScale?: { id: string; name: string } | null; programme: { name: string }; reviewType: { name: string } };
 type Employee = { id: string; employeeNumber: string; user: { firstName: string; lastName: string; isActive: boolean }; department?: { name: string } | null; designation?: { name: string; grade?: string | null } | null };
 type LibraryItem = { id: string; name: string; code: string; description?: string | null; defaultWeight?: string | number | null };
 type Scale = { id: string; name: string; description?: string | null; levels: Array<{ id: string; name: string; score: string | number; description?: string | null }> };
@@ -46,7 +46,7 @@ export default function PerformanceAdmin() {
   const planReadyToSubmit = !!selectedPlan && selectedPlan.status === 'DRAFT' && selectedPlan.items.length > 0 && Math.abs(selectedPlanWeight - 100) <= 0.01;
   const [programmeForm, setProgrammeForm] = useState({ name: '', code: '', description: '' });
   const [reviewForm, setReviewForm] = useState({ name: '', code: '', description: '' });
-  const [cycleForm, setCycleForm] = useState({ name: '', reviewTypeId: '', startsAt: '', endsAt: '' });
+  const [cycleForm, setCycleForm] = useState({ name: '', reviewTypeId: '', ratingScaleId: '', startsAt: '', endsAt: '' });
   const [kpiForm, setKpiForm] = useState({ name: '', code: '', description: '', defaultWeight: '' });
   const [competencyForm, setCompetencyForm] = useState({ name: '', code: '', description: '', defaultWeight: '' });
   const [scaleForm, setScaleForm] = useState({ name: '', description: '', levels: [{ name: 'Outstanding', score: '5' }, { name: 'Exceeds Expectations', score: '4' }, { name: 'Meets Expectations', score: '3' }, { name: 'Needs Improvement', score: '2' }, { name: 'Unsatisfactory', score: '1' }] });
@@ -115,7 +115,7 @@ export default function PerformanceAdmin() {
       {programmeId && <>
         <div className="grid">
           <div className="card"><h2>Review types</h2><form className="form" onSubmit={e => { e.preventDefault(); submit(`/performance/programmes/${programmeId}/review-types`, reviewForm, 'Review type created.', () => setReviewForm({ name: '', code: '', description: '' }), () => loadProgramme(programmeId)); }}><label>Name<input value={reviewForm.name} onChange={e => setReviewForm({ ...reviewForm, name: e.target.value })} required /></label><label>Code<input value={reviewForm.code} onChange={e => setReviewForm({ ...reviewForm, code: e.target.value })} required /></label><label>Description<input value={reviewForm.description} onChange={e => setReviewForm({ ...reviewForm, description: e.target.value })} /></label><button className="button">Add review type</button></form><ul>{reviewTypes.map(r => <li key={r.id}><strong>{r.name}</strong> ({r.code})</li>)}</ul></div>
-          <div className="card"><h2>Performance cycles</h2><form className="form" onSubmit={e => { e.preventDefault(); submit(`/performance/organisations/${organisationId}/cycles`, { ...cycleForm, programmeId, startsAt: new Date(cycleForm.startsAt).toISOString(), endsAt: new Date(cycleForm.endsAt).toISOString() }, 'Cycle created.', () => setCycleForm({ name: '', reviewTypeId: reviewTypes[0]?.id ?? '', startsAt: '', endsAt: '' })); }}><label>Name<input value={cycleForm.name} onChange={e => setCycleForm({ ...cycleForm, name: e.target.value })} required /></label><label>Review type<select value={cycleForm.reviewTypeId} onChange={e => setCycleForm({ ...cycleForm, reviewTypeId: e.target.value })} required>{reviewTypes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label><label>Start<input type="datetime-local" value={cycleForm.startsAt} onChange={e => setCycleForm({ ...cycleForm, startsAt: e.target.value })} required /></label><label>End<input type="datetime-local" value={cycleForm.endsAt} onChange={e => setCycleForm({ ...cycleForm, endsAt: e.target.value })} required /></label><button className="button" disabled={!reviewTypes.length}>Create cycle</button></form></div>
+          <div className="card"><h2>Performance cycles</h2><form className="form" onSubmit={e => { e.preventDefault(); submit(`/performance/organisations/${organisationId}/cycles`, { ...cycleForm, programmeId, ratingScaleId: cycleForm.ratingScaleId || undefined, startsAt: new Date(cycleForm.startsAt).toISOString(), endsAt: new Date(cycleForm.endsAt).toISOString() }, 'Cycle created.', () => setCycleForm({ name: '', reviewTypeId: reviewTypes[0]?.id ?? '', ratingScaleId: '', startsAt: '', endsAt: '' })); }}><label>Name<input value={cycleForm.name} onChange={e => setCycleForm({ ...cycleForm, name: e.target.value })} required /></label><label>Review type<select value={cycleForm.reviewTypeId} onChange={e => setCycleForm({ ...cycleForm, reviewTypeId: e.target.value })} required>{reviewTypes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label><label>Rating scale<select value={cycleForm.ratingScaleId} onChange={e => setCycleForm({ ...cycleForm, ratingScaleId: e.target.value })} required><option value="">Select rating scale…</option>{scales.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Start<input type="datetime-local" value={cycleForm.startsAt} onChange={e => setCycleForm({ ...cycleForm, startsAt: e.target.value })} required /></label><label>End<input type="datetime-local" value={cycleForm.endsAt} onChange={e => setCycleForm({ ...cycleForm, endsAt: e.target.value })} required /></label><button className="button" disabled={!reviewTypes.length || !scales.length || !cycleForm.ratingScaleId}>Create cycle</button></form></div>
         </div>
 
         <div className="grid">
@@ -204,7 +204,7 @@ export default function PerformanceAdmin() {
         </div>}
       </div>
 
-      <div className="card"><h2>Cycles</h2>{cycles.length ? <ul>{cycles.map(c => <li key={c.id}><strong>{c.name}</strong> · {c.programme.name} · {c.reviewType.name} · {c.status} · {new Date(c.startsAt).toLocaleDateString()} – {new Date(c.endsAt).toLocaleDateString()}</li>)}</ul> : <p className="muted">No performance cycles configured.</p>}</div>
+      <div className="card"><h2>Cycles</h2>{cycles.length ? <ul>{cycles.map(c => <li key={c.id}><strong>{c.name}</strong> · {c.programme.name} · {c.reviewType.name} · {c.ratingScale?.name ?? 'No rating scale'} · {c.status} · {new Date(c.startsAt).toLocaleDateString()} – {new Date(c.endsAt).toLocaleDateString()}</li>)}</ul> : <p className="muted">No performance cycles configured.</p>}</div>
     </>}
   </section></main>;
 }
