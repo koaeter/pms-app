@@ -31,7 +31,7 @@ export class PerformanceController {
   @Get('organisations/:organisationId/cycles') @RequirePermissions('performance.read')
   async cycles(@Param('organisationId') organisationId: string, @Req() request: { user: any }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.listCycles(organisationId); }
   @Post('organisations/:organisationId/cycles') @RequirePermissions('performance.manage')
-  async createCycle(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { programmeId: string; reviewTypeId: string; name: string; startsAt: string; endsAt: string }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.createCycle({ ...body, organisationId }); }
+  async createCycle(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { programmeId: string; reviewTypeId: string; ratingScaleId?: string; name: string; startsAt: string; endsAt: string }) { await this.access.requireOrganisationAccess(organisationId, request.user); return this.service.createCycle({ ...body, organisationId }); }
   @Get('programmes/:programmeId/kpis') @RequirePermissions('performance.read')
   async kpis(@Param('programmeId') programmeId: string, @Req() request: { user: any }) { await this.access.requireProgrammeAccess(programmeId, request.user); return this.service.listKpis(programmeId); }
   @Post('programmes/:programmeId/kpis') @RequirePermissions('performance.manage')
