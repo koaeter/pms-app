@@ -7,7 +7,7 @@ function makeService(cycle: any, options: { programmeActive?: boolean; scaleOrg?
   const prisma = {
     performanceCycle: {
       findUnique: async () => cycle,
-      update: async ({ data }: any) => ({ ...cycle, ...data }),
+      updateMany: async () => ({ count: 1 }),
     },
     performanceProgramme: {
       findUnique: async () => ({ isActive: options.programmeActive ?? true }),
@@ -22,6 +22,7 @@ function makeService(cycle: any, options: { programmeActive?: boolean; scaleOrg?
       count: async () => 0,
     },
   } as any;
+  prisma.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prisma);
   return new CycleWorkflowService(prisma);
 }
 
@@ -53,4 +54,24 @@ test('cycle with a valid rating scale can open', async () => {
   const cycle = { id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: 'scale-1', status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31') };
   const result = await makeService(cycle).updateStatus('cycle-1', 'OPEN');
   assert.equal(result.status, 'OPEN');
+});
+
+
+test('cycle transition rejects a concurrent state change', async () => {
+  const cycle = { id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: 'scale-1', status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31') };
+  const prisma = {
+    performanceCycle: {
+      findUnique: async () => cycle,
+      updateMany: async () => ({ count: 0 }),
+    },
+    performanceProgramme: { findUnique: async () => ({ isActive: true }) },
+    ratingScale: { findUnique: async () => ({ id: 'scale-1', organisationId: 'org-a' }) },
+    ratingLevel: { count: async () => 1 },
+  } as any;
+  prisma.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prisma);
+  const service = new CycleWorkflowService(prisma);
+  await assert.rejects(
+    () => service.updateStatus('cycle-1', 'OPEN'),
+    /changed before this transition could be applied/i,
+  );
 });
