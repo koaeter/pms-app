@@ -282,9 +282,23 @@ export class PerformanceService {
     const finalAssessment = plan.assessments.find((assessment) => assessment.assessorType === 'FINAL' && assessment.status === 'SUBMITTED');
     if (!finalAssessment) throw new BadRequestException('A submitted final assessment is required before approval');
     const updated = await this.prisma.$transaction(async (tx) => {
-      const assessment = await tx.performanceAssessment.update({ where: { id: finalAssessment.id }, data: { status: 'APPROVED' } });
-      await tx.performancePlan.update({ where: { id: planId }, data: { status: 'APPROVED' } });
-      return assessment;
+      const assessmentResult = await tx.performanceAssessment.updateMany({
+        where: { id: finalAssessment.id, planId, assessorType: 'FINAL', status: 'SUBMITTED' },
+        data: { status: 'APPROVED' },
+      });
+      if (assessmentResult.count !== 1) {
+        throw new BadRequestException('The final assessment changed before approval could be completed');
+      }
+
+      const planResult = await tx.performancePlan.updateMany({
+        where: { id: planId, status: 'IN_REVIEW' },
+        data: { status: 'APPROVED' },
+      });
+      if (planResult.count !== 1) {
+        throw new BadRequestException('The performance plan changed before approval could be completed');
+      }
+
+      return tx.performanceAssessment.findUnique({ where: { id: finalAssessment.id } });
     });
     return { assessment: updated, planStatus: 'APPROVED', finalScore: Number(finalAssessment.overallScore ?? 0) };
   }
