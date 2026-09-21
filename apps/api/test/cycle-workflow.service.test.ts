@@ -4,10 +4,14 @@ import { BadRequestException } from '@nestjs/common';
 import { CycleWorkflowService } from '../src/performance/cycle-workflow.service';
 
 function makeService(cycle: any, options: { programmeActive?: boolean; scaleOrg?: string; levelCount?: number } = {}) {
+  let currentCycle = { ...cycle };
   const prisma = {
     performanceCycle: {
-      findUnique: async () => cycle,
-      updateMany: async () => ({ count: 1 }),
+      findUnique: async () => currentCycle,
+      updateMany: async ({ data }: any) => {
+        currentCycle = { ...currentCycle, ...data };
+        return { count: 1 };
+      },
     },
     performanceProgramme: {
       findUnique: async () => ({ isActive: options.programmeActive ?? true }),
