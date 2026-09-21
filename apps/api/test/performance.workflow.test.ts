@@ -71,10 +71,11 @@ function approvalService(plan: any) {
     $transaction: async (callback: any) =>
       callback({
         performanceAssessment: {
-          update: async ({ data }: any) => ({ ...plan.finalAssessment, ...data }),
+          updateMany: async () => ({ count: 1 }),
+          findUnique: async () => ({ ...plan.finalAssessment, status: 'APPROVED' }),
         },
         performancePlan: {
-          update: async ({ data }: any) => ({ ...plan, ...data }),
+          updateMany: async () => ({ count: 1 }),
         },
       }),
   } as any;
@@ -158,5 +159,57 @@ test('non-administrators cannot approve or lock performance plans', async () => 
   await assert.rejects(
     () => approvalService(plan).lockPlan('plan-1', user),
     /not authorised/i,
+  );
+});
+
+
+test('final approval rejects a concurrent assessment change', async () => {
+  const plan = {
+    id: 'plan-1',
+    status: 'IN_REVIEW',
+    assessments: [
+      { id: 'assessment-final', assessorType: 'FINAL', status: 'SUBMITTED', overallScore: 87.5 },
+    ],
+    finalAssessment: { id: 'assessment-final', status: 'SUBMITTED', overallScore: 87.5 },
+  };
+  const prisma = {
+    performancePlan: { findUnique: async () => plan },
+    $transaction: async (callback: any) => callback({
+      performanceAssessment: {
+        updateMany: async () => ({ count: 0 }),
+      },
+      performancePlan: { updateMany: async () => ({ count: 1 }) },
+    }),
+  } as any;
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  await assert.rejects(
+    () => service.approveFinalAssessment('plan-1', admin),
+    /final assessment changed before approval/i,
+  );
+});
+
+test('final approval rejects a concurrent plan state change', async () => {
+  const plan = {
+    id: 'plan-1',
+    status: 'IN_REVIEW',
+    assessments: [
+      { id: 'assessment-final', assessorType: 'FINAL', status: 'SUBMITTED', overallScore: 87.5 },
+    ],
+    finalAssessment: { id: 'assessment-final', status: 'SUBMITTED', overallScore: 87.5 },
+  };
+  const prisma = {
+    performancePlan: { findUnique: async () => plan },
+    $transaction: async (callback: any) => callback({
+      performanceAssessment: {
+        updateMany: async () => ({ count: 1 }),
+        findUnique: async () => ({ ...plan.finalAssessment, status: 'APPROVED' }),
+      },
+      performancePlan: { updateMany: async () => ({ count: 0 }) },
+    }),
+  } as any;
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  await assert.rejects(
+    () => service.approveFinalAssessment('plan-1', admin),
+    /performance plan changed before approval/i,
   );
 });
