@@ -350,6 +350,7 @@ test('assessment save uses a serializable transaction', async () => {
   const plan = {
     id: 'plan-1',
     status: 'SUBMITTED',
+    employeeId: 'employee-1',
     cycle: { status: 'OPEN', organisationId: 'org-1', ratingScaleId: 'scale-1', ratingScale: { levels: [{ id: 'level-1', score: 5 }] } },
     items: [{ id: 'item-1', weight: 100 }],
     assessments: [],
