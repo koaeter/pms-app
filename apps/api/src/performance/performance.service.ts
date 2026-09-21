@@ -189,14 +189,27 @@ export class PerformanceService {
   }
 
   async submitPlan(planId: string) {
-    const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, include: { items: true, cycle: { include: { ratingScale: { include: { levels: true } } } } } });
-    if (!plan) throw new NotFoundException('Performance plan not found');
-    if (plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be submitted');
-    if (plan.cycle.status !== 'OPEN') throw new BadRequestException('Plans can only be submitted while the performance cycle is open');
-    if (plan.items.length === 0) throw new BadRequestException('A performance plan must contain at least one item');
-    const totalWeight = plan.items.reduce((sum, item) => sum + Number(item.weight), 0);
-    if (Math.abs(totalWeight - 100) > 0.01) throw new BadRequestException(`Plan item weights must total 100%; current total is ${totalWeight.toFixed(2)}%`);
-    return this.prisma.performancePlan.update({ where: { id: planId }, data: { status: 'SUBMITTED' } });
+    return this.prisma.$transaction(async (tx) => {
+      const plan = await tx.performancePlan.findUnique({
+        where: { id: planId },
+        include: { items: true, cycle: { include: { ratingScale: { include: { levels: true } } } } },
+      });
+      if (!plan) throw new NotFoundException('Performance plan not found');
+      if (plan.status !== 'DRAFT') throw new BadRequestException('Only draft plans can be submitted');
+      if (plan.cycle.status !== 'OPEN') throw new BadRequestException('Plans can only be submitted while the performance cycle is open');
+      if (plan.items.length === 0) throw new BadRequestException('A performance plan must contain at least one item');
+
+      const totalWeight = plan.items.reduce((sum, item) => sum + Number(item.weight), 0);
+      if (Math.abs(totalWeight - 100) > 0.01) throw new BadRequestException(`Plan item weights must total 100%; current total is ${totalWeight.toFixed(2)}%`);
+
+      const result = await tx.performancePlan.updateMany({
+        where: { id: planId, status: 'DRAFT' },
+        data: { status: 'SUBMITTED' },
+      });
+      if (result.count !== 1) throw new BadRequestException('The performance plan changed before submission could be completed');
+
+      return tx.performancePlan.findUnique({ where: { id: planId } });
+    });
   }
 
   async upsertAssessment(
