@@ -68,6 +68,7 @@ function approvalService(plan: any) {
     performancePlan: {
       findUnique: async () => plan,
       update: async ({ data }: any) => ({ ...plan, ...data }),
+      updateMany: async () => ({ count: 1 }),
     },
     $transaction: async (callback: any) =>
       callback({
