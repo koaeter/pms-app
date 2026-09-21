@@ -1,12 +1,21 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AssessmentWorkflowService {
   constructor(private readonly prisma: PrismaService) {}
 
   async assertCanAssess(planId: string, assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL') {
-    const plan = await this.prisma.performancePlan.findUnique({
+    return this.assertCanAssessWithClient(this.prisma, planId, assessorType);
+  }
+
+  async assertCanAssessWithClient(
+    client: PrismaService | Prisma.TransactionClient,
+    planId: string,
+    assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL',
+  ) {
+    const plan = await client.performancePlan.findUnique({
       where: { id: planId },
       include: { cycle: true, assessments: true },
     });
