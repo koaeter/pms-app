@@ -378,5 +378,5 @@ test('assessment save uses a serializable transaction', async () => {
     items: [{ planItemId: 'item-1', ratingLevelId: 'level-1' }],
   });
   assert.equal(isolation, 'Serializable');
-  assert.equal(result.assessment.id, 'assessment-1');
+  assert.equal(result.assessment?.id, 'assessment-1');
 });
