@@ -17,6 +17,12 @@ function submitPlanService(plan: any) {
       update: async ({ data }: any) => ({ ...plan, ...data }),
       updateMany: async () => ({ count: 1 }),
     },
+    $transaction: async (callback: any) => callback({
+      performancePlan: {
+        findUnique: async () => plan,
+        updateMany: async () => ({ count: 1 }),
+      },
+    }),
   } as any;
   return new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
 }
@@ -229,5 +235,28 @@ test('plan locking rejects a concurrent state change', async () => {
   await assert.rejects(
     () => service.lockPlan('plan-1', admin),
     /performance plan changed before it could be locked/i,
+  );
+});
+
+
+test('plan submission rejects a concurrent plan state change', async () => {
+  const plan = {
+    id: 'plan-1',
+    status: 'DRAFT',
+    items: [{ weight: 100 }],
+    cycle: { status: 'OPEN', ratingScale: { levels: [] } },
+  };
+  const prisma = {
+    $transaction: async (callback: any) => callback({
+      performancePlan: {
+        findUnique: async () => plan,
+        updateMany: async () => ({ count: 0 }),
+      },
+    }),
+  } as any;
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  await assert.rejects(
+    () => service.submitPlan('plan-1'),
+    /performance plan changed before submission/i,
   );
 });
