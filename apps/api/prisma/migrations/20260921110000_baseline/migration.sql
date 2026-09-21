@@ -257,6 +257,20 @@ CREATE UNIQUE INDEX "PerformanceAssessment_planId_assessorId_assessorType_key" O
 CREATE INDEX "PerformanceAssessment_planId_idx" ON "PerformanceAssessment"("planId");
 CREATE INDEX "PerformanceAssessment_assessorId_idx" ON "PerformanceAssessment"("assessorId");
 
+-- RatingLevel depends on RatingScale and is declared separately to keep
+-- the baseline dependency ordering explicit.
+CREATE TABLE "RatingLevel" (
+  "id" TEXT NOT NULL,
+  "scaleId" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "score" DECIMAL(6,2) NOT NULL,
+  "description" TEXT,
+  CONSTRAINT "RatingLevel_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "RatingLevel_scaleId_name_key" ON "RatingLevel"("scaleId","name");
+CREATE INDEX "RatingLevel_scaleId_idx" ON "RatingLevel"("scaleId");
+ALTER TABLE "RatingLevel" ADD CONSTRAINT "RatingLevel_scaleId_fkey" FOREIGN KEY ("scaleId") REFERENCES "RatingScale"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 CREATE TABLE "PerformanceAssessmentItem" (
   "id" TEXT NOT NULL,
   "assessmentId" TEXT NOT NULL,
@@ -321,16 +335,3 @@ ALTER TABLE "PerformanceAssessmentItem" ADD CONSTRAINT "PerformanceAssessmentIte
 ALTER TABLE "PerformanceAssessmentItem" ADD CONSTRAINT "PerformanceAssessmentItem_ratingScaleId_fkey" FOREIGN KEY ("ratingScaleId") REFERENCES "RatingScale"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 ALTER TABLE "PerformanceAssessmentItem" ADD CONSTRAINT "PerformanceAssessmentItem_ratingLevelId_fkey" FOREIGN KEY ("ratingLevelId") REFERENCES "RatingLevel"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
--- RatingLevel depends on RatingScale and is declared separately to keep
--- the baseline dependency ordering explicit.
-CREATE TABLE "RatingLevel" (
-  "id" TEXT NOT NULL,
-  "scaleId" TEXT NOT NULL,
-  "name" TEXT NOT NULL,
-  "score" DECIMAL(6,2) NOT NULL,
-  "description" TEXT,
-  CONSTRAINT "RatingLevel_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX "RatingLevel_scaleId_name_key" ON "RatingLevel"("scaleId","name");
-CREATE INDEX "RatingLevel_scaleId_idx" ON "RatingLevel"("scaleId");
-ALTER TABLE "RatingLevel" ADD CONSTRAINT "RatingLevel_scaleId_fkey" FOREIGN KEY ("scaleId") REFERENCES "RatingScale"("id") ON DELETE CASCADE ON UPDATE CASCADE;
