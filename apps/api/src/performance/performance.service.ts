@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { AssessmentWorkflowService } from './assessment-workflow.service';
 
 export type CurrentUser = {
   id: string;
@@ -10,7 +11,7 @@ export type CurrentUser = {
 
 @Injectable()
 export class PerformanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly workflow: AssessmentWorkflowService) {}
 
   listProgrammes(organisationId: string) {
     return this.prisma.performanceProgramme.findMany({
@@ -208,7 +209,7 @@ export class PerformanceService {
     if (!assessor) throw new BadRequestException('Authenticated user is not linked to an employee record');
 
     await this.authorizeAssessor(plan, assessor.id, currentUser.roles, data.assessorType);
-    this.validateAssessmentStage(plan, data.assessorType);
+    await this.workflow.assertCanAssess(planId, data.assessorType);
 
     const planItemIds = new Set(plan.items.map((item) => item.id));
     if (data.items.length !== plan.items.length || data.items.some((item) => !planItemIds.has(item.planItemId))) {
@@ -260,7 +261,7 @@ export class PerformanceService {
     const assessor = await this.prisma.employee.findUnique({ where: { userId: currentUser.id } });
     if (!assessor) throw new BadRequestException('Authenticated user is not linked to an employee record');
     await this.authorizeAssessor(plan, assessor.id, currentUser.roles, assessorType);
-    this.validateAssessmentStage(plan, assessorType);
+    await this.workflow.assertCanAssess(planId, assessorType);
 
     const assessment = await this.prisma.performanceAssessment.findUnique({ where: { planId_assessorId_assessorType: { planId, assessorId: assessor.id, assessorType } }, include: { items: true } });
     if (!assessment) throw new NotFoundException('Assessment draft not found');
@@ -316,14 +317,6 @@ export class PerformanceService {
     }
   }
 
-  private validateAssessmentStage(plan: any, assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL') {
-    const submitted = (type: string) => plan.assessments.some((assessment: any) => assessment.assessorType === type && assessment.status !== 'DRAFT');
-    if (plan.status === 'APPROVED' || plan.status === 'LOCKED') throw new BadRequestException('This performance plan is already finalised');
-    if (assessorType === 'SELF' && submitted('SELF')) throw new BadRequestException('Self assessment has already been submitted');
-    if (assessorType === 'SUPERVISOR' && !submitted('SELF')) throw new BadRequestException('Employee self assessment must be submitted first');
-    if (assessorType === 'REVIEWER' && !submitted('SUPERVISOR')) throw new BadRequestException('Supervisor assessment must be submitted first');
-    if (assessorType === 'FINAL' && !submitted('REVIEWER')) throw new BadRequestException('Reviewer assessment must be submitted first');
-  }
 
   private workflowFor(plan: any, assessorType: string, status: string) {
     const submitted = new Set(plan.assessments.filter((assessment: any) => assessment.status !== 'DRAFT').map((assessment: any) => assessment.assessorType));
