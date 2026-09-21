@@ -86,3 +86,45 @@ test('wrong final assessor is rejected by the service', async () => {
     (error: unknown) => error instanceof ForbiddenException && /not the assigned final assessor/.test((error as Error).message),
   );
 });
+
+
+function makeSubmissionService(plan: any, assessment: any, assessmentUpdateCount = 1, planUpdateCount = 1) {
+  const prisma = {
+    employee: {
+      findUnique: async () => ({ id: 'reviewer-1' }),
+    },
+    performanceAssessment: {
+      findUnique: async () => assessment,
+    },
+    $transaction: async (callback: any) => callback({
+      performanceAssessment: {
+        updateMany: async () => ({ count: assessmentUpdateCount }),
+        findUnique: async () => ({ ...assessment, status: 'SUBMITTED' }),
+      },
+      performancePlan: {
+        updateMany: async () => ({ count: planUpdateCount }),
+      },
+    }),
+  } as any;
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  (service as any).getPlan = async () => plan;
+  return service;
+}
+
+test('assessment submission rejects a concurrent assessment change', async () => {
+  const plan = makePlan();
+  const assessment = { id: 'assessment-1', planId: 'plan-1', assessorId: 'reviewer-1', assessorType: 'REVIEWER', status: 'DRAFT', items: [] };
+  await assert.rejects(
+    () => makeSubmissionService(plan, assessment, 0).submitAssessment('plan-1', reviewer, 'REVIEWER'),
+    /assessment changed before submission/i,
+  );
+});
+
+test('assessment submission rejects a concurrent plan state change', async () => {
+  const plan = makePlan();
+  const assessment = { id: 'assessment-1', planId: 'plan-1', assessorId: 'reviewer-1', assessorType: 'REVIEWER', status: 'DRAFT', items: [] };
+  await assert.rejects(
+    () => makeSubmissionService(plan, assessment, 1, 0).submitAssessment('plan-1', reviewer, 'REVIEWER'),
+    /performance plan changed before assessment submission/i,
+  );
+});
