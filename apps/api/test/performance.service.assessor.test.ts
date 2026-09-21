@@ -34,7 +34,7 @@ function makeService(plan: any) {
     },
   } as any;
 
-  const service = new PerformanceService(prisma);
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
   (service as any).getPlan = async () => plan;
   return service;
 }
