@@ -34,7 +34,7 @@ function submitPlanService(plan: any) {
       },
     }),
   } as any;
-  return new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  return new PerformanceService(prisma, { assertCanAssess: async () => ({}), assertCanAssessWithClient: async () => ({}) } as any);
 }
 
 test('plan submission requires an OPEN cycle', async () => {
