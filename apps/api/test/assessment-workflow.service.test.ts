@@ -69,3 +69,47 @@ test('workflow permits the next stage when the prerequisite is submitted', async
 
   assert.equal(result.id, 'plan-1');
 });
+
+
+test('transaction-aware workflow guard re-reads stage prerequisites', async () => {
+  let selfSubmitted = false;
+  const tx = {
+    performancePlan: {
+      findUnique: async () => ({
+        id: 'plan-1',
+        status: 'IN_REVIEW',
+        cycle: { status: 'REVIEW' },
+        assessments: selfSubmitted ? [{ assessorType: 'SELF', status: 'SUBMITTED' }] : [],
+      }),
+    },
+  } as any;
+  const workflow = new AssessmentWorkflowService({} as any);
+
+  await assert.rejects(
+    () => workflow.assertCanAssessWithClient(tx, 'plan-1', 'SUPERVISOR'),
+    /self assessment must be submitted/i,
+  );
+
+  selfSubmitted = true;
+  const result = await workflow.assertCanAssessWithClient(tx, 'plan-1', 'SUPERVISOR');
+  assert.equal(result.id, 'plan-1');
+});
+
+test('transaction-aware workflow guard rejects a stage after its prerequisite is no longer submitted', async () => {
+  const tx = {
+    performancePlan: {
+      findUnique: async () => ({
+        id: 'plan-1',
+        status: 'IN_REVIEW',
+        cycle: { status: 'REVIEW' },
+        assessments: [{ assessorType: 'SELF', status: 'DRAFT' }],
+      }),
+    },
+  } as any;
+  const workflow = new AssessmentWorkflowService({} as any);
+
+  await assert.rejects(
+    () => workflow.assertCanAssessWithClient(tx, 'plan-1', 'SUPERVISOR'),
+    /self assessment must be submitted/i,
+  );
+});
