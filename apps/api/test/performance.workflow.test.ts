@@ -277,3 +277,106 @@ test('plan submission rejects a concurrent plan state change', async () => {
     /performance plan changed before submission/i,
   );
 });
+
+
+test('plan item creation uses serializable transaction and rechecks draft state', async () => {
+  let status = 'DRAFT';
+  let isolation: string | undefined;
+  const prisma = {
+    $transaction: async (callback: any, options: any) => {
+      isolation = options?.isolationLevel;
+      return callback({
+        performancePlan: {
+          findUnique: async () => ({ id: 'plan-1', status, cycle: { programmeId: 'programme-1' } }),
+        },
+        kpi: {
+          findFirst: async () => ({ id: 'kpi-1', programmeId: 'programme-1' }),
+        },
+        performancePlanItem: {
+          create: async ({ data }: any) => ({ id: 'item-1', ...data }),
+        },
+      });
+    },
+  } as any;
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  const result = await service.addPlanItem({
+    planId: 'plan-1',
+    type: 'KPI',
+    kpiId: 'kpi-1',
+    weight: 100,
+  });
+  assert.equal(isolation, 'Serializable');
+  assert.equal(result.id, 'item-1');
+});
+
+test('plan item creation rejects when plan changes before the insert', async () => {
+  const prisma = {
+    $transaction: async (callback: any) => callback({
+      performancePlan: {
+        findUnique: async () => ({ id: 'plan-1', status: 'DRAFT', cycle: { programmeId: 'programme-1' } }),
+      },
+      kpi: {
+        findFirst: async () => ({ id: 'kpi-1', programmeId: 'programme-1' }),
+      },
+      performancePlanItem: {
+        create: async () => {
+          throw new Error('insert should not run');
+        },
+      },
+    }),
+  } as any;
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  // The service performs a second plan read before creation; simulate the state transition.
+  let reads = 0;
+  prisma.$transaction = async (callback: any) => callback({
+    performancePlan: {
+      findUnique: async () => {
+        reads += 1;
+        return reads === 1
+          ? { id: 'plan-1', status: 'DRAFT', cycle: { programmeId: 'programme-1' } }
+          : { id: 'plan-1', status: 'SUBMITTED', cycle: { programmeId: 'programme-1' } };
+      },
+    },
+    kpi: { findFirst: async () => ({ id: 'kpi-1', programmeId: 'programme-1' }) },
+    performancePlanItem: { create: async () => { throw new Error('insert should not run'); } },
+  });
+  await assert.rejects(
+    () => service.addPlanItem({ planId: 'plan-1', type: 'KPI', kpiId: 'kpi-1', weight: 100 }),
+    /plan changed before the item could be added/i,
+  );
+});
+
+test('assessment save uses a serializable transaction', async () => {
+  const plan = {
+    id: 'plan-1',
+    status: 'SUBMITTED',
+    cycle: { status: 'OPEN', organisationId: 'org-1', ratingScaleId: 'scale-1', ratingScale: { levels: [{ id: 'level-1', score: 5 }] } },
+    items: [{ id: 'item-1', weight: 100 }],
+    assessments: [],
+  };
+  let isolation: string | undefined;
+  const prisma = {
+    performancePlan: { findUnique: async () => plan },
+    employee: { findUnique: async () => ({ id: 'employee-1' }) },
+    ratingLevel: { findMany: async () => [{ id: 'level-1', scaleId: 'scale-1', score: 5 }] },
+    ratingScale: { findMany: async () => [{ id: 'scale-1', organisationId: 'org-1', levels: [{ score: 5 }] }] },
+    $transaction: async (callback: any, options: any) => {
+      isolation = options?.isolationLevel;
+      return callback({
+        performancePlan: { findUnique: async () => plan },
+        performanceAssessment: {
+          findUnique: async () => null,
+          create: async ({ data }: any) => ({ id: 'assessment-1', status: 'DRAFT', ...data, items: [] }),
+        },
+      });
+    },
+  } as any;
+  const workflow = { assertCanAssess: async () => ({}) };
+  const service = new PerformanceService(prisma, workflow as any);
+  const result = await service.upsertAssessment('plan-1', { ...admin, id: 'employee-user' }, {
+    assessorType: 'SELF',
+    items: [{ planItemId: 'item-1', ratingLevelId: 'level-1' }],
+  });
+  assert.equal(isolation, 'Serializable');
+  assert.equal(result.assessment.id, 'assessment-1');
+});
