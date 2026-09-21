@@ -24,6 +24,13 @@ export class CycleWorkflowService {
       if (cycle.endsAt <= cycle.startsAt) throw new BadRequestException('Cycle end date must be after the start date');
       const programme = await this.prisma.performanceProgramme.findUnique({ where: { id: cycle.programmeId } });
       if (!programme?.isActive) throw new BadRequestException('The cycle programme must be active before opening the cycle');
+      if (!cycle.ratingScaleId) throw new BadRequestException('A rating scale must be configured before opening the performance cycle');
+      const ratingScale = await this.prisma.ratingScale.findUnique({ where: { id: cycle.ratingScaleId } });
+      if (!ratingScale || ratingScale.organisationId !== cycle.organisationId) {
+        throw new BadRequestException('The cycle rating scale must belong to the cycle organisation');
+      }
+      const levelCount = await this.prisma.ratingLevel.count({ where: { scaleId: cycle.ratingScaleId } });
+      if (levelCount === 0) throw new BadRequestException('The cycle rating scale must contain at least one rating level');
     }
 
     if (status === 'REVIEW') {
