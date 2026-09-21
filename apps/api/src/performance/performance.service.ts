@@ -276,9 +276,7 @@ export class PerformanceService {
       if (currentPlan.cycle.status !== 'OPEN' && currentPlan.cycle.status !== 'REVIEW') {
         throw new BadRequestException('Performance assessments are only available during an open or review cycle');
       }
-      if (currentPlan.status === 'APPROVED' || currentPlan.status === 'LOCKED') {
-        throw new BadRequestException('This performance plan is already finalised');
-      }
+      await this.workflow.assertCanAssessWithClient(tx, planId, data.assessorType);
 
       const existing = await tx.performanceAssessment.findUnique({
         where: { planId_assessorId_assessorType: { planId, assessorId: assessor.id, assessorType: data.assessorType } },
@@ -332,6 +330,8 @@ export class PerformanceService {
     if (assessment.items.length !== plan.items.length) throw new BadRequestException('Complete every performance plan item before submitting');
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      await this.workflow.assertCanAssessWithClient(tx, planId, assessorType);
+
       const assessmentResult = await tx.performanceAssessment.updateMany({
         where: { id: assessment.id, planId, assessorId: assessor.id, assessorType, status: 'DRAFT' },
         data: { status: 'SUBMITTED' },
