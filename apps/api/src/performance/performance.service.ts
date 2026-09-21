@@ -310,7 +310,7 @@ export class PerformanceService {
           },
           include: { items: true },
         });
-      } catch (error) {
+      } catch (error: any) {
         if (error?.code === 'P2002') throw new BadRequestException('An assessment draft already exists for this stage');
         throw error;
       }
