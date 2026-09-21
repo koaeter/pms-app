@@ -115,7 +115,7 @@ test('submitted final assessment can be approved by an administrator', async () 
   };
 
   const result = await approvalService(plan).approveFinalAssessment('plan-1', admin);
-  assert.equal(result.assessment.status, 'APPROVED');
+  assert.equal(result.assessment?.status, 'APPROVED');
   assert.equal(result.planStatus, 'APPROVED');
   assert.equal(result.finalScore, 87.5);
 });
