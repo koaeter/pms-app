@@ -339,7 +339,9 @@ export class PerformanceService {
       data: { status: 'LOCKED' },
     });
     if (result.count !== 1) throw new BadRequestException('The performance plan changed before it could be locked');
-    return this.prisma.performancePlan.findUnique({ where: { id: planId } });
+    const lockedPlan = await this.prisma.performancePlan.findUnique({ where: { id: planId } });
+    if (!lockedPlan) throw new NotFoundException('Performance plan not found');
+    return lockedPlan;
   }
 
   private async authorizeAssessor(plan: any, assessorId: string, roles: string[], assessorType: string) {
