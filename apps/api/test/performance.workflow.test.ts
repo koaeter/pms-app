@@ -78,7 +78,7 @@ function approvalService(plan: any) {
         },
       }),
   } as any;
-  return new PerformanceService(prisma);
+  return new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
 }
 
 test('final approval is blocked until a submitted final assessment exists', async () => {
