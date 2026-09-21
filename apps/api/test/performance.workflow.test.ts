@@ -11,16 +11,26 @@ const admin: CurrentUser = {
 };
 
 function submitPlanService(plan: any) {
+  let currentPlan = { ...plan };
   const prisma = {
     performancePlan: {
-      findUnique: async () => plan,
-      update: async ({ data }: any) => ({ ...plan, ...data }),
-      updateMany: async () => ({ count: 1 }),
+      findUnique: async () => currentPlan,
+      update: async ({ data }: any) => {
+        currentPlan = { ...currentPlan, ...data };
+        return currentPlan;
+      },
+      updateMany: async ({ data }: any) => {
+        currentPlan = { ...currentPlan, ...data };
+        return { count: 1 };
+      },
     },
     $transaction: async (callback: any) => callback({
       performancePlan: {
-        findUnique: async () => plan,
-        updateMany: async () => ({ count: 1 }),
+        findUnique: async () => currentPlan,
+        updateMany: async ({ data }: any) => {
+          currentPlan = { ...currentPlan, ...data };
+          return { count: 1 };
+        },
       },
     }),
   } as any;
@@ -70,11 +80,18 @@ test('a valid draft plan can be submitted', async () => {
 });
 
 function approvalService(plan: any) {
+  let currentPlan = { ...plan };
   const prisma = {
     performancePlan: {
-      findUnique: async () => plan,
-      update: async ({ data }: any) => ({ ...plan, ...data }),
-      updateMany: async () => ({ count: 1 }),
+      findUnique: async () => currentPlan,
+      update: async ({ data }: any) => {
+        currentPlan = { ...currentPlan, ...data };
+        return currentPlan;
+      },
+      updateMany: async ({ data }: any) => {
+        currentPlan = { ...currentPlan, ...data };
+        return { count: 1 };
+      },
     },
     $transaction: async (callback: any) =>
       callback({
