@@ -28,6 +28,7 @@ function service(planOverrides: Record<string, unknown> = {}, candidates: unknow
     employeeId: 'employee-1',
     reviewerId: null,
     finalAssessorId: null,
+    assessments: [],
     employee: { id: 'employee-1', organisationId: 'org-a' },
     ...planOverrides,
   };
@@ -103,5 +104,26 @@ test('non-administrator cannot assign assessors', async () => {
   await assert.rejects(
     () => service().assignAssessors('plan-1', { reviewerId: 'reviewer-1' }, { id: 'employee-user', roles: ['EMPLOYEE'] }),
     ForbiddenException,
+  );
+});
+
+
+test('reviewer cannot be changed after reviewer assessment submission', async () => {
+  await assert.rejects(
+    () => service({
+      reviewerId: 'reviewer-1',
+      assessments: [{ assessorType: 'REVIEWER', status: 'SUBMITTED' }],
+    }, [employee('reviewer-2')]).assignAssessors('plan-1', { reviewerId: 'reviewer-2' }, admin),
+    (error: unknown) => error instanceof BadRequestException && /reviewer cannot be changed after/i.test((error as Error).message),
+  );
+});
+
+test('final assessor cannot be changed after final assessment submission', async () => {
+  await assert.rejects(
+    () => service({
+      finalAssessorId: 'reviewer-1',
+      assessments: [{ assessorType: 'FINAL', status: 'APPROVED' }],
+    }, [employee('reviewer-2')]).assignAssessors('plan-1', { finalAssessorId: 'reviewer-2' }, admin),
+    (error: unknown) => error instanceof BadRequestException && /final assessor cannot be changed after/i.test((error as Error).message),
   );
 });
