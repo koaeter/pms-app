@@ -9,9 +9,12 @@
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:migrate:deploy": "prisma migrate deploy"
   },
-  "prisma": { "seed": "tsx prisma/seed.ts" },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",
