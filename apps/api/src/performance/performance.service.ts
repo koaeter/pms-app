@@ -269,9 +269,23 @@ export class PerformanceService {
     if (assessment.items.length !== plan.items.length) throw new BadRequestException('Complete every performance plan item before submitting');
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const submitted = await tx.performanceAssessment.update({ where: { id: assessment.id }, data: { status: 'SUBMITTED' } });
-      await tx.performancePlan.update({ where: { id: planId }, data: { status: 'IN_REVIEW' } });
-      return submitted;
+      const assessmentResult = await tx.performanceAssessment.updateMany({
+        where: { id: assessment.id, planId, assessorId: assessor.id, assessorType, status: 'DRAFT' },
+        data: { status: 'SUBMITTED' },
+      });
+      if (assessmentResult.count !== 1) {
+        throw new BadRequestException('The assessment changed before submission could be completed');
+      }
+
+      const planResult = await tx.performancePlan.updateMany({
+        where: { id: planId, status: { in: ['SUBMITTED', 'IN_REVIEW'] } },
+        data: { status: 'IN_REVIEW' },
+      });
+      if (planResult.count !== 1) {
+        throw new BadRequestException('The performance plan changed before assessment submission could be completed');
+      }
+
+      return tx.performanceAssessment.findUnique({ where: { id: assessment.id } });
     });
     return { assessment: updated, workflow: this.workflowFor(plan, assessorType, 'SUBMITTED') };
   }
