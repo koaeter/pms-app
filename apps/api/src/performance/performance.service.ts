@@ -270,12 +270,51 @@ export class PerformanceService {
     const itemById = new Map(plan.items.map((item) => [item.id, item]));
     const overallScore = scoredItems.reduce((sum, item) => sum + (item.score * Number(itemById.get(item.planItemId)!.weight)) / totalWeight, 0);
 
-    const existing = await this.prisma.performanceAssessment.findUnique({ where: { planId_assessorId_assessorType: { planId, assessorId: assessor.id, assessorType: data.assessorType } } });
-    if (existing?.status === 'SUBMITTED' || existing?.status === 'APPROVED') throw new BadRequestException('This assessment has already been submitted');
+    const assessment = await this.prisma.$transaction(async (tx) => {
+      const currentPlan = await tx.performancePlan.findUnique({ where: { id: planId }, include: { cycle: true } });
+      if (!currentPlan) throw new NotFoundException('Performance plan not found');
+      if (currentPlan.cycle.status !== 'OPEN' && currentPlan.cycle.status !== 'REVIEW') {
+        throw new BadRequestException('Performance assessments are only available during an open or review cycle');
+      }
+      if (currentPlan.status === 'APPROVED' || currentPlan.status === 'LOCKED') {
+        throw new BadRequestException('This performance plan is already finalised');
+      }
 
-    const assessment = existing
-      ? await this.prisma.performanceAssessment.update({ where: { id: existing.id }, data: { overallScore, comment: data.comment, items: { deleteMany: {}, create: scoredItems } }, include: { items: true } })
-      : await this.prisma.performanceAssessment.create({ data: { planId, assessorId: assessor.id, assessorType: data.assessorType, overallScore, comment: data.comment, items: { create: scoredItems } }, include: { items: true } });
+      const existing = await tx.performanceAssessment.findUnique({
+        where: { planId_assessorId_assessorType: { planId, assessorId: assessor.id, assessorType: data.assessorType } },
+      });
+      if (existing?.status === 'SUBMITTED' || existing?.status === 'APPROVED') {
+        throw new BadRequestException('This assessment has already been submitted');
+      }
+
+      if (existing) {
+        const result = await tx.performanceAssessment.updateMany({
+          where: { id: existing.id, status: 'DRAFT' },
+          data: { overallScore, comment: data.comment },
+        });
+        if (result.count !== 1) throw new BadRequestException('The assessment changed before it could be saved');
+        await tx.performanceAssessmentItem.deleteMany({ where: { assessmentId: existing.id } });
+        await tx.performanceAssessmentItem.createMany({ data: scoredItems.map((item) => ({ ...item, assessmentId: existing.id })) });
+        return tx.performanceAssessment.findUnique({ where: { id: existing.id }, include: { items: true } });
+      }
+
+      try {
+        return await tx.performanceAssessment.create({
+          data: {
+            planId,
+            assessorId: assessor.id,
+            assessorType: data.assessorType,
+            overallScore,
+            comment: data.comment,
+            items: { create: scoredItems },
+          },
+          include: { items: true },
+        });
+      } catch (error) {
+        if (error?.code === 'P2002') throw new BadRequestException('An assessment draft already exists for this stage');
+        throw error;
+      }
+    }, { isolationLevel: 'Serializable' });
 
     return { assessment, workflow: this.workflowFor(plan, data.assessorType, 'DRAFT') };
   }
