@@ -66,7 +66,7 @@ test('a valid draft plan can be submitted', async () => {
   };
 
   const result = await submitPlanService(plan).submitPlan('plan-1');
-  assert.equal(result.status, 'SUBMITTED');
+  assert.equal(result!.status, 'SUBMITTED');
 });
 
 function approvalService(plan: any) {
@@ -141,7 +141,7 @@ test('approved plans can be locked by an administrator', async () => {
   const plan = { id: 'plan-1', status: 'APPROVED', assessments: [] };
 
   const result = await approvalService(plan).lockPlan('plan-1', admin);
-  assert.equal(result.status, 'LOCKED');
+  assert.equal(result!.status, 'LOCKED');
 });
 
 test('non-administrators cannot approve or lock performance plans', async () => {
