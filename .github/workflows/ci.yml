@@ -9,6 +9,22 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://pms:pms_ci_password@localhost:5432/pms
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: pms
+          POSTGRES_USER: pms
+          POSTGRES_PASSWORD: pms_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U pms -d pms"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - name: Checkout
@@ -29,6 +45,9 @@ jobs:
 
       - name: Generate Prisma Client
         run: pnpm db:generate
+
+      - name: Apply Prisma migrations
+        run: pnpm --filter @pms/api prisma:migrate:deploy
 
       - name: API typecheck
         run: pnpm typecheck
