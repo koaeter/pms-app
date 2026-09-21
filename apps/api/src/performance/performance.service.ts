@@ -321,7 +321,12 @@ export class PerformanceService {
     const plan = await this.getPlan(planId);
     if (!this.canAdministerWorkflow(currentUser.roles)) throw new BadRequestException('You are not authorised to lock performance plans');
     if (plan.status !== 'APPROVED') throw new BadRequestException('Only approved plans can be locked');
-    return this.prisma.performancePlan.update({ where: { id: planId }, data: { status: 'LOCKED' } });
+    const result = await this.prisma.performancePlan.updateMany({
+      where: { id: planId, status: 'APPROVED' },
+      data: { status: 'LOCKED' },
+    });
+    if (result.count !== 1) throw new BadRequestException('The performance plan changed before it could be locked');
+    return this.prisma.performancePlan.findUnique({ where: { id: planId } });
   }
 
   private async authorizeAssessor(plan: any, assessorId: string, roles: string[], assessorType: string) {
