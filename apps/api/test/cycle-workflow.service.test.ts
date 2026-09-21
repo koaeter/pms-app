@@ -8,7 +8,8 @@ function makeService(cycle: any, options: { programmeActive?: boolean; scaleOrg?
   const prisma = {
     performanceCycle: {
       findUnique: async () => currentCycle,
-      updateMany: async ({ data }: any) => {
+      updateMany: async ({ where, data }: any) => {
+        if (where?.id !== currentCycle.id || where?.status !== currentCycle.status) return { count: 0 };
         currentCycle = { ...currentCycle, ...data };
         return { count: 1 };
       },
