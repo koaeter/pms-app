@@ -46,13 +46,25 @@ export class PerformanceAssignmentService {
 
     const plan = await this.prisma.performancePlan.findUnique({
       where: { id: planId },
-      include: { employee: true, reviewer: true, finalAssessor: true },
+      include: { employee: true, reviewer: true, finalAssessor: true, assessments: { select: { assessorType: true, status: true } } },
     });
     if (!plan) throw new NotFoundException('Performance plan not found');
     if (!plan.employee.organisationId) throw new BadRequestException('Performance plan employee has no organisation');
 
     const reviewerId = data.reviewerId === undefined ? plan.reviewerId : data.reviewerId;
     const finalAssessorId = data.finalAssessorId === undefined ? plan.finalAssessorId : data.finalAssessorId;
+
+    const submittedStages = new Set(
+      plan.assessments
+        .filter((assessment: { status: string }) => assessment.status !== 'DRAFT')
+        .map((assessment: { assessorType: string }) => assessment.assessorType),
+    );
+    if (submittedStages.has('REVIEWER') && reviewerId !== plan.reviewerId) {
+      throw new BadRequestException('The reviewer cannot be changed after the reviewer assessment has been submitted');
+    }
+    if (submittedStages.has('FINAL') && finalAssessorId !== plan.finalAssessorId) {
+      throw new BadRequestException('The final assessor cannot be changed after the final assessment has been submitted');
+    }
 
     if (reviewerId && finalAssessorId && reviewerId === finalAssessorId) {
       throw new BadRequestException('Reviewer and final assessor must be different employees');
