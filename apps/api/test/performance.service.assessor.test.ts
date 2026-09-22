@@ -106,7 +106,7 @@ function makeSubmissionService(plan: any, assessment: any, assessmentUpdateCount
       },
     }),
   } as any;
-  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  const service = new PerformanceService(prisma, { assertCanAssess: async () => ({}), assertCanAssessWithClient: async () => ({}) } as any);
   (service as any).getPlan = async () => plan;
   return service;
 }
