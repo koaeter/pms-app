@@ -43,7 +43,7 @@ export class ReportsService {
     await this.requireOrganisationAccess(employee.organisationId, user);
 
     return this.prisma.performancePlan.findMany({
-      where: { employeeId },
+      where: { employeeId, cycle: { organisationId: employee.organisationId } },
       orderBy: { cycle: { startsAt: 'desc' } },
       include: {
         cycle: { select: { id: true, name: true, startsAt: true, endsAt: true, status: true, programme: { select: { name: true, code: true } }, reviewType: { select: { name: true, code: true } } } },
