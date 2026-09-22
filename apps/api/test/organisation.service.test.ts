@@ -11,7 +11,7 @@ function basePrisma(existingOrganisationId: string | null) {
     designation: { findFirst: async () => null },
     employee: {
       findUnique: async () => existingOrganisationId ? { id: 'employee-a', organisationId: existingOrganisationId } : null,
-      upsert: async (args: any) => args,
+      upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
     },
   };
 }
