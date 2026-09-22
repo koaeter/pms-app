@@ -93,8 +93,8 @@ test('system administrators can assign elevated administrative roles', async () 
     organisationId: null,
   }, 'user-a', 'role-admin');
 
-  assert.equal(result.userId, 'user-a');
-  assert.equal(result.roleId, 'role-admin');
+  assert.equal(result.create.userId, 'user-a');
+  assert.equal(result.create.roleId, 'role-admin');
 });
 
 test('scoped administrators can only read audit logs from their organisation', async () => {
