@@ -100,6 +100,9 @@ export class OrganisationService {
     if (data.designationId && !(await this.prisma.designation.findFirst({ where: { id: data.designationId, organisationId: data.organisationId } }))) throw new NotFoundException('Designation not found in this organisation');
     if (data.managerId && !(await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId } }))) throw new NotFoundException('Manager not found in this organisation');
     const existing = await this.prisma.employee.findUnique({ where: { userId: data.userId } });
+    if (existing && existing.organisationId !== data.organisationId && !user.roles.includes('SYSTEM_ADMIN')) {
+      throw new ForbiddenException('Only a system administrator can move an employee between organisations');
+    }
     if (existing && data.managerId === existing.id) throw new BadRequestException('An employee cannot be their own manager');
     return this.prisma.employee.upsert({ where: { userId: data.userId }, create: { ...data, employeeNumber: data.employeeNumber.trim() }, update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId } });
   }
