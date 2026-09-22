@@ -1,10 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { createPasswordHash } from '../auth/auth.service';
+import { AuditService } from '../audit.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
 
   private require(user: { permissions: string[] }, permission: string) {
     if (!user.permissions.includes(permission)) throw new ForbiddenException('Insufficient permission');
@@ -26,7 +27,12 @@ export class AdminService {
   async createUser(actor: { id: string; permissions: string[] }, data: { username: string; password: string; firstName: string; lastName: string; email?: string }) {
     this.require(actor, 'users.manage');
     if (data.password.length < 10) throw new BadRequestException('Password must be at least 10 characters');
-    return this.prisma.user.create({ data: { ...data, passwordHash: createPasswordHash(data.password) }, select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true } });
+    const user = await this.prisma.user.create({
+      data: { ...data, passwordHash: createPasswordHash(data.password) },
+      select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
+    });
+    await this.audit.record('USER_CREATED', 'User', user.id, actor.id, { username: user.username });
+    return user;
   }
 
   async setUserStatus(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, userId: string, isActive: boolean) {
@@ -35,7 +41,9 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
-    return this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
+    const updated = await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
+    await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
+    return updated;
   }
 
   listRoles(user: { permissions: string[] }) {
@@ -49,7 +57,12 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     if (!role) throw new NotFoundException('Role not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
-    return this.prisma.userRole.upsert({ where: { userId_roleId: { userId, roleId } }, update: {}, create: { userId, roleId } });
+    if (!actor.roles?.includes('SYSTEM_ADMIN') && ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)) {
+      throw new ForbiddenException('Only a system administrator can assign elevated administrative roles');
+    }
+    const assignment = await this.prisma.userRole.upsert({ where: { userId_roleId: { userId, roleId } }, update: {}, create: { userId, roleId } });
+    await this.audit.record('USER_ROLE_ASSIGNED', 'User', userId, actor.id, { role: role.name, roleId });
+    return assignment;
   }
 
   listAudit(user: { permissions: string[] }) {
