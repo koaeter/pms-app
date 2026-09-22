@@ -65,11 +65,19 @@ export class AdminService {
     return assignment;
   }
 
-  listAudit(user: { permissions: string[]; roles?: string[]; organisationId?: string | null }) {
+  async listAudit(user: { permissions: string[]; roles?: string[]; organisationId?: string | null }) {
     this.require(user, 'audit.read');
-    const where = user.roles?.includes('SYSTEM_ADMIN')
-      ? undefined
-      : { actor: { employee: { organisationId: user.organisationId ?? '__none__' } } };
-    return this.prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, take: 200 });
-  }
-}
+    if (user.roles?.includes('SYSTEM_ADMIN')) {
+      return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+    }
+    if (!user.organisationId) return [];
+    const actors = await this.prisma.user.findMany({
+      where: { employee: { organisationId: user.organisationId } },
+      select: { id: true },
+    });
+    return this.prisma.auditLog.findMany({
+      where: { actorId: { in: actors.map((actor) => actor.id) } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+  }}
