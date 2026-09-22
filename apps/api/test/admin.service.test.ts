@@ -14,7 +14,7 @@ function service() {
       update: async ({ where, data }: any) => ({ id: where.id, username: 'user', isActive: data.isActive }),
     },
     role: { findUnique: async () => ({ id: 'role-1', name: 'EMPLOYEE' }) },
-    userRole: { upsert: async (args: any) => args },
+    userRole: { upsert: async ({ create }: any) => create },
   } as any, { record: async () => undefined } as any);
 }
 
@@ -93,8 +93,8 @@ test('system administrators can assign elevated administrative roles', async () 
     organisationId: null,
   }, 'user-a', 'role-admin');
 
-  assert.equal(result.where.userId_roleId.userId, 'user-a');
-  assert.equal(result.where.userId_roleId.roleId, 'role-admin');
+  assert.equal(result.userId, 'user-a');
+  assert.equal(result.roleId, 'role-admin');
 });
 
 
