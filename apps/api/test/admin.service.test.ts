@@ -83,7 +83,7 @@ test('system administrators can assign elevated administrative roles', async () 
       findUnique: async () => ({ id: 'user-a', employee: { organisationId: 'org-a' } }),
     },
     role: { findUnique: async () => ({ id: 'role-admin', name: 'SYSTEM_ADMIN' }) },
-    userRole: { upsert: async (args: any) => args },
+    userRole: { upsert: async ({ create }: any) => create },
   } as any, { record: async (args: any) => args } as any);
 
   const result = await admin.assignRole({
@@ -93,8 +93,8 @@ test('system administrators can assign elevated administrative roles', async () 
     organisationId: null,
   }, 'user-a', 'role-admin');
 
-  assert.equal(result.create.userId, 'user-a');
-  assert.equal(result.create.roleId, 'role-admin');
+  assert.equal(result.userId, 'user-a');
+  assert.equal(result.roleId, 'role-admin');
 });
 
 test('scoped administrators can only read audit logs from their organisation', async () => {
