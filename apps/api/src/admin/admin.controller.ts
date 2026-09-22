@@ -28,5 +28,5 @@ export class AdminController {
 
   @Get('audit')
   @RequirePermissions('audit.read')
-  audit(@Req() request: { user: { permissions: string[] } }) { return this.service.listAudit(request.user); }
+  audit(@Req() request: { user: { permissions: string[]; roles?: string[]; organisationId?: string | null } }) { return this.service.listAudit(request.user); }
 }
