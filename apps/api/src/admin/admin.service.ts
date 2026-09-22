@@ -65,8 +65,11 @@ export class AdminService {
     return assignment;
   }
 
-  listAudit(user: { permissions: string[] }) {
+  listAudit(user: { permissions: string[]; roles?: string[]; organisationId?: string | null }) {
     this.require(user, 'audit.read');
-    return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+    const where = user.roles?.includes('SYSTEM_ADMIN')
+      ? undefined
+      : { actor: { employee: { organisationId: user.organisationId ?? '__none__' } } };
+    return this.prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, take: 200 });
   }
 }
