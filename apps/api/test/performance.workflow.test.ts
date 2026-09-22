@@ -104,7 +104,7 @@ function approvalService(plan: any) {
         },
       }),
   } as any;
-  return new PerformanceService(prisma, { assertCanAssess: async () => ({}) } as any);
+  return new PerformanceService(prisma, { assertCanAssess: async () => ({}), assertCanAssessWithClient: async () => ({}) } as any);
 }
 
 test('final approval is blocked until a submitted final assessment exists', async () => {
@@ -372,7 +372,7 @@ test('assessment save uses a serializable transaction', async () => {
       });
     },
   } as any;
-  const workflow = { assertCanAssess: async () => ({}) };
+  const workflow = { assertCanAssess: async () => ({}), assertCanAssessWithClient: async () => ({}) };
   const service = new PerformanceService(prisma, workflow as any);
   const result = await service.upsertAssessment('plan-1', { ...admin, id: 'employee-user' }, {
     assessorType: 'SELF',
