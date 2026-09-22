@@ -57,7 +57,6 @@ test('scoped administrators cannot assign roles to users outside their organisat
   );
 });
 
-
 test('scoped administrators cannot assign elevated administrative roles', async () => {
   const admin = new AdminService({
     user: {
@@ -94,5 +93,6 @@ test('system administrators can assign elevated administrative roles', async () 
     organisationId: null,
   }, 'user-a', 'role-admin');
 
-  assert.equal(result.userId, 'user-a');
+  assert.equal(result.where.userId_roleId.userId, 'user-a');
+  assert.equal(result.where.userId_roleId.roleId, 'role-admin');
 });
