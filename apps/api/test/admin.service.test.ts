@@ -24,7 +24,7 @@ test('scoped administrators can only list users in their organisation', async ()
       findMany: async ({ where }: any) => where,
     },
   };
-  const admin = new AdminService(prisma as any);
+  const admin = new AdminService(prisma as any, { record: async () => undefined } as any);
   const where = await admin.listUsers({
     permissions: ['users.read'],
     roles: ['HR_ADMIN'],
@@ -94,5 +94,5 @@ test('system administrators can assign elevated administrative roles', async () 
     organisationId: null,
   }, 'user-a', 'role-admin');
 
-  assert.equal(result.where.userId_roleId.userId, 'user-a');
+  assert.equal(result.userId, 'user-a');
 });
