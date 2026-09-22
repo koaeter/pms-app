@@ -51,6 +51,17 @@ test('reports allow a scoped administrator to access its own organisation summar
   assert.equal(result.employeeCount, 3);
 });
 
+test('employee history scopes plans to the employee organisation', async () => {
+  let capturedWhere: any;
+  const scoped = new ReportsService({
+    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employeeNumber: 'E001', user: { firstName: 'A', lastName: 'User', username: 'a' }, department: null, designation: null }) },
+    performancePlan: { findMany: async ({ where }: any) => { capturedWhere = where; return []; } },
+  } as any);
+  await scoped.employeeHistory('employee-a', { id: 'admin-a', roles: ['HR_ADMIN'], permissions: ['reports.read'], organisationId: 'org-a' });
+  assert.deepEqual(capturedWhere, { employeeId: 'employee-a', cycle: { organisationId: 'org-a' } });
+});
+
 test('employee history rejects an employee from another organisation', async () => {
   const crossOrg = new ReportsService({
     organisation: { findUnique: async () => ({ id: 'org-b' }) },
