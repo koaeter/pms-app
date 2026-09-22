@@ -96,3 +96,18 @@ test('system administrators can assign elevated administrative roles', async () 
   assert.equal(result.where.userId_roleId.userId, 'user-a');
   assert.equal(result.where.userId_roleId.roleId, 'role-admin');
 });
+
+
+test('scoped administrators can only read audit logs from their organisation', async () => {
+  const prisma = { auditLog: { findMany: async ({ where }: any) => where } };
+  const admin = new AdminService(prisma as any, { record: async () => undefined } as any);
+  const where = await admin.listAudit({ permissions: ['audit.read'], roles: ['HR_ADMIN'], organisationId: 'org-a' });
+  assert.deepEqual(where, { actor: { employee: { organisationId: 'org-a' } } });
+});
+
+test('system administrators can read audit logs across organisations', async () => {
+  const prisma = { auditLog: { findMany: async ({ where }: any) => where } };
+  const admin = new AdminService(prisma as any, { record: async () => undefined } as any);
+  const where = await admin.listAudit({ permissions: ['audit.read'], roles: ['SYSTEM_ADMIN'], organisationId: null });
+  assert.equal(where, undefined);
+});
