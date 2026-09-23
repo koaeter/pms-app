@@ -13,7 +13,7 @@ export class PerformanceAssignmentService {
   async listCandidates(organisationId: string, user: AssignmentUser) {
     this.assertAdmin(user);
     const employees = await this.prisma.employee.findMany({
-      where: { organisationId, user: { isActive: true } },
+      where: { organisationId, userId: { not: null }, user: { isActive: true } },
       include: {
         user: { include: { roles: { include: { role: true } } } },
         department: true,
