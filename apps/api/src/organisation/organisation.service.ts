@@ -160,6 +160,17 @@ export class OrganisationService {
     }
   }
 
+  async updateEmployeeStatus(employeeId: string, status: 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'EXITED', user: OrganisationUser) {
+    const employee = await this.prisma.employee.findUnique({ where: { id: employeeId }, include: { user: true } });
+    if (!employee) throw new NotFoundException('Employee not found');
+    if (!employee.organisationId) throw new BadRequestException('Employee has no organisation');
+    await this.requireOrganisationAccess(employee.organisationId, user);
+    if (employee.employmentStatus === status) return employee;
+    const updated = await this.prisma.employee.update({ where: { id: employeeId }, data: { employmentStatus: status }, include: { user: { select: { id: true, username: true, isActive: true } } } });
+    await this.audit?.record('EMPLOYEE_STATUS_CHANGED', 'Employee', employeeId, user.id, { from: employee.employmentStatus, to: status });
+    return updated;
+  }
+
   async createEmployee(data: { employeeNumber: string; organisationId: string; departmentId?: string; designationId?: string; managerId?: string }, user: OrganisationUser) {
     await this.requireOrganisationAccess(data.organisationId, user);
     const employeeNumber = data.employeeNumber.trim();
