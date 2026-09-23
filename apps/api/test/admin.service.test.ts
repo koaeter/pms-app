@@ -186,10 +186,10 @@ test('reassigning an existing role is idempotent and does not emit another audit
 });
 
 test('scoped administrators can only read audit logs from their organisation', async () => {
-  const prisma = { user: { findMany: async () => [{ id: 'actor-a' }] }, auditLog: { findMany: async ({ where }: any) => where } };
+  const prisma = { auditLog: { findMany: async ({ where }: any) => where } };
   const admin = new AdminService(prisma as any, { record: async () => undefined } as any);
   const where = await admin.listAudit({ permissions: ['audit.read'], roles: ['HR_ADMIN'], organisationId: 'org-a' });
-  assert.deepEqual(where, { actorId: { in: ['actor-a'] } });
+  assert.deepEqual(where, { organisationId: 'org-a' });
 });
 
 test('system administrators can read audit logs across organisations', async () => {
