@@ -70,7 +70,7 @@ export class OrganisationService {
         if (currentId === id) throw new BadRequestException('Department parent assignment would create a hierarchy cycle');
         if (visited.has(currentId)) throw new BadRequestException('Department parent assignment contains a hierarchy cycle');
         visited.add(currentId);
-        const current = await this.prisma.department.findUnique({ where: { id: currentId }, select: { id: true, parentId: true, organisationId: true } });
+        const current: { id: string; parentId: string | null; organisationId: string } | null = await this.prisma.department.findUnique({ where: { id: currentId }, select: { id: true, parentId: true, organisationId: true } });
         if (!current || current.organisationId !== department.organisationId) break;
         currentId = current.parentId;
       }
@@ -132,7 +132,7 @@ export class OrganisationService {
         if (currentId === existing?.id) throw new BadRequestException('Manager assignment would create an organisational reporting cycle');
         if (visited.has(currentId)) throw new BadRequestException('Manager assignment contains an organisational reporting cycle');
         visited.add(currentId);
-        const manager = await this.prisma.employee.findUnique({ where: { id: currentId }, select: { id: true, managerId: true, organisationId: true } });
+        const manager: { id: string; managerId: string | null; organisationId: string | null } | null = await this.prisma.employee.findUnique({ where: { id: currentId }, select: { id: true, managerId: true, organisationId: true } });
         if (!manager || manager.organisationId !== data.organisationId) break;
         currentId = manager.managerId;
       }
