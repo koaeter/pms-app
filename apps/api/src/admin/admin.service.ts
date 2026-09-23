@@ -128,7 +128,8 @@ export class AdminService {
           data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
           select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
         });
-        await tx.employee.update({ where: { id: employeeId }, data: { userId: createdUser.id } });
+        const linked = await tx.employee.updateMany({ where: { id: employeeId, userId: null }, data: { userId: createdUser.id } });
+        if (linked.count !== 1) throw new BadRequestException('Employee was linked by another request');
         return createdUser;
       });
       await this.audit.record('EMPLOYEE_ACCOUNT_CREATED', 'Employee', employeeId, actor.id, { userId: created.id, username: created.username });
