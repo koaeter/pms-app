@@ -80,6 +80,7 @@ model Employee {
   manager Employee? @relation("EmployeeManager", fields: [managerId], references: [id])
   reports Employee[] @relation("EmployeeManager")
   performancePlans PerformancePlan[]
+  supervisorPlans PerformancePlan[] @relation("PerformancePlanSupervisor")
   reviewerPlans PerformancePlan[] @relation("PerformancePlanReviewer")
   finalAssessorPlans PerformancePlan[] @relation("PerformancePlanFinalAssessor")
   assessmentsGiven PerformanceAssessment[] @relation("Assessor")
@@ -275,12 +276,14 @@ model PerformancePlan {
   employeeId String
   cycleId String
   reviewTypeId String
+  supervisorId String?
   reviewerId String?
   finalAssessorId String?
   status PlanStatus @default(DRAFT)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   reviewType ReviewType @relation(fields: [reviewTypeId], references: [id])
+  supervisor Employee? @relation("PerformancePlanSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
   reviewer Employee? @relation("PerformancePlanReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
   finalAssessor Employee? @relation("PerformancePlanFinalAssessor", fields: [finalAssessorId], references: [id], onDelete: SetNull)
   items PerformancePlanItem[]
@@ -290,6 +293,7 @@ model PerformancePlan {
   @@unique([employeeId, cycleId, reviewTypeId])
   @@index([cycleId])
   @@index([employeeId])
+  @@index([supervisorId])
   @@index([reviewerId])
   @@index([finalAssessorId])
 }
