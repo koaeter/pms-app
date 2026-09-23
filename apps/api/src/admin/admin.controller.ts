@@ -12,7 +12,19 @@ export class AdminController {
 
   @Post('users')
   @RequirePermissions('users.manage')
-  createUser(@Req() request: { user: { id: string; permissions: string[] } }, @Body() body: { username: string; password: string; firstName: string; lastName: string; email?: string }) { return this.service.createUser(request.user, body); }
+  createUser(@Req() request: { user: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null } }, @Body() body: { username: string; password: string; firstName: string; lastName: string; email?: string; provisioningOrganisationId?: string | null }) { return this.service.createUser(request.user, body); }
+
+  @Post('users/:userId/link-employee/:employeeId')
+  @RequirePermissions('users.manage')
+  linkUserToEmployee(@Req() request: { user: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null } }, @Param('userId') userId: string, @Param('employeeId') employeeId: string) {
+    return this.service.linkUserToEmployee(request.user, userId, employeeId);
+  }
+
+  @Post('employees/:employeeId/account')
+  @RequirePermissions('users.manage')
+  createAccountForEmployee(@Req() request: { user: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null } }, @Param('employeeId') employeeId: string, @Body() body: { username: string; password: string; firstName?: string; lastName?: string; email?: string }) {
+    return this.service.createAccountForEmployee(request.user, employeeId, body);
+  }
 
   @Post('users/:userId/status')
   @RequirePermissions('users.manage')
