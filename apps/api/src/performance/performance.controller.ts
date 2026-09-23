@@ -148,7 +148,7 @@ export class PerformanceController {
 
     const plan = await this.service.getPlan(planId);
     let recipients: string[] = [];
-    if (body.assessorType === 'SELF' && plan.employee.manager) {
+    if (body.assessorType === 'SELF' && plan.employee.manager?.userId) {
       recipients = [plan.employee.manager.userId];
     } else if (body.assessorType === 'SUPERVISOR' && plan.reviewer?.user?.id) {
       recipients = [plan.reviewer.user.id];
@@ -170,11 +170,11 @@ export class PerformanceController {
   private async prismaAdminRecipients(organisationId: string | null) {
     if (!organisationId) return [];
     const employees = await this.prisma.employee.findMany({
-      where: { organisationId, user: { isActive: true } },
+      where: { organisationId, userId: { not: null }, user: { isActive: true } },
       include: { user: { include: { roles: { include: { role: true } } } } },
     });
     return employees
-      .filter(({ user }) => user.roles.some(({ role }) => ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)))
+      .filter(({ user }) => user !== null && user.roles.some(({ role }) => ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)))
       .map(({ user }) => user.id);
   }
 
