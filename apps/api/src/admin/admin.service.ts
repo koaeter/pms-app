@@ -26,13 +26,31 @@ export class AdminService {
 
   async createUser(actor: { id: string; permissions: string[] }, data: { username: string; password: string; firstName: string; lastName: string; email?: string }) {
     this.require(actor, 'users.manage');
+
+    const username = data.username.trim();
+    const firstName = data.firstName.trim();
+    const lastName = data.lastName.trim();
+    const email = data.email?.trim() || undefined;
+
+    if (!username) throw new BadRequestException('Username is required');
+    if (!firstName) throw new BadRequestException('First name is required');
+    if (!lastName) throw new BadRequestException('Last name is required');
+    if (email && !/^\\S+@\\S+\\.\\S+$/.test(email)) throw new BadRequestException('Email address is invalid');
     if (data.password.length < 10) throw new BadRequestException('Password must be at least 10 characters');
-    const user = await this.prisma.user.create({
-      data: { ...data, passwordHash: createPasswordHash(data.password) },
-      select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
-    });
-    await this.audit.record('USER_CREATED', 'User', user.id, actor.id, { username: user.username });
-    return user;
+
+    try {
+      const user = await this.prisma.user.create({
+        data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
+        select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
+      });
+      await this.audit.record('USER_CREATED', 'User', user.id, actor.id, { username: user.username });
+      return user;
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+        throw new BadRequestException('Username or email is already in use');
+      }
+      throw error;
+    }
   }
 
   async setUserStatus(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, userId: string, isActive: boolean) {
