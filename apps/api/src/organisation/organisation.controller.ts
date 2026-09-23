@@ -46,6 +46,12 @@ export class OrganisationController {
   @RequirePermissions('organisation.read')
   employees(@Param('organisationId') organisationId: string, @Req() request: { user: any }) { return this.service.listEmployees(organisationId, request.user); }
 
+  @Patch('employees/:employeeId/status')
+  @RequirePermissions('users.manage')
+  updateEmployeeStatus(@Param('employeeId') employeeId: string, @Req() request: { user: any }, @Body() body: { status: 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'EXITED' }) {
+    return this.service.updateEmployeeStatus(employeeId, body.status, request.user);
+  }
+
   @Post(':organisationId/employees')
   @RequirePermissions('users.manage')
   assignEmployee(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { userId: string; employeeNumber: string; departmentId?: string; designationId?: string; managerId?: string }) { return this.service.assignEmployee({ ...body, organisationId }, request.user); }
