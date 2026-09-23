@@ -26,10 +26,13 @@ export default function UsersAdmin() {
     const [u, r] = await Promise.all([fetch(`${API}/admin/users`, { headers }), fetch(`${API}/admin/roles`, { headers })]);
     if (!u.ok || !r.ok) { setError('You do not have permission to administer users.'); return; }
     setUsers(await u.json()); setRoles(await r.json());
-    const currentUser = JSON.parse(localStorage.getItem('pms_user') ?? 'null');
-    if (currentUser?.organisationId) {
-      const e = await fetch(`${API}/organisation/${currentUser.organisationId}/employees`, { headers });
-      if (e.ok) setEmployees(await e.json());
+    const me = await fetch(API + '/auth/me', { headers });
+    if (me.ok) {
+      const currentUser = await me.json();
+      if (currentUser?.organisationId) {
+        const e = await fetch(API + '/organisation/' + currentUser.organisationId + '/employees', { headers });
+        if (e.ok) setEmployees(await e.json());
+      }
     }
   }
 
