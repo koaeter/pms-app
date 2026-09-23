@@ -14,7 +14,10 @@ function service() {
       update: async ({ where, data }: any) => ({ id: where.id, username: 'user', isActive: data.isActive }),
     },
     role: { findUnique: async () => ({ id: 'role-1', name: 'EMPLOYEE' }) },
-    userRole: { upsert: async ({ create }: any) => create },
+    userRole: {
+      create: async ({ data }: any) => data,
+      findUniqueOrThrow: async ({ where }: any) => where.userId_roleId,
+    },
     session: { deleteMany: async () => ({ count: 0 }) },
   } as any, { record: async () => undefined } as any);
 }
@@ -85,7 +88,7 @@ test('system administrators can assign elevated administrative roles', async () 
       findUnique: async () => ({ id: 'user-a', employee: { organisationId: 'org-a' } }),
     },
     role: { findUnique: async () => ({ id: 'role-admin', name: 'SYSTEM_ADMIN' }) },
-    userRole: { upsert: async ({ create }: any) => create },
+    userRole: { create: async ({ data }: any) => data },
     session: { deleteMany: async () => ({ count: 0 }) },
   } as any, { record: async (args: any) => args } as any);
 
@@ -98,6 +101,33 @@ test('system administrators can assign elevated administrative roles', async () 
 
   assert.equal(result.userId, 'user-a');
   assert.equal(result.roleId, 'role-admin');
+});
+
+test('reassigning an existing role is idempotent and does not emit another audit event', async () => {
+  let auditCount = 0;
+  const admin = new AdminService({
+    user: { findUnique: async () => ({ id: 'user-a', employee: { organisationId: 'org-a' } }) },
+    role: { findUnique: async () => ({ id: 'role-employee', name: 'EMPLOYEE' }) },
+    userRole: {
+      create: async () => {
+        const error = new Error('Unique constraint failed') as Error & { code: string };
+        error.code = 'P2002';
+        throw error;
+      },
+      findUniqueOrThrow: async ({ where }: any) => where.userId_roleId,
+    },
+    session: { deleteMany: async () => ({ count: 1 }) },
+  } as any, { record: async () => { auditCount += 1; } } as any);
+
+  const result = await admin.assignRole({
+    id: 'admin-a',
+    permissions: ['roles.manage'],
+    roles: ['HR_ADMIN'],
+    organisationId: 'org-a',
+  }, 'user-a', 'role-employee');
+
+  assert.deepEqual(result, { userId: 'user-a', roleId: 'role-employee' });
+  assert.equal(auditCount, 0);
 });
 
 test('scoped administrators can only read audit logs from their organisation', async () => {
