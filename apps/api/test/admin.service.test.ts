@@ -150,3 +150,39 @@ test('administrators cannot remove the system administrator role', async () => {
     (error: unknown) => error instanceof ForbiddenException,
   );
 });
+
+
+test('user creation rejects duplicate username or email cleanly', async () => {
+  const admin = new AdminService({
+    user: {
+      create: async () => {
+        const error = new Error('Unique constraint failed') as Error & { code: string };
+        error.code = 'P2002';
+        throw error;
+      },
+    },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.createUser(
+      { id: 'admin-a', permissions: ['users.manage'] },
+      { username: 'existing', password: 'valid-password', firstName: 'Test', lastName: 'User' },
+    ),
+    (error: any) => error?.response?.message === 'Username or email is already in use',
+  );
+});
+
+test('user creation rejects blank identity fields and malformed email', async () => {
+  const admin = new AdminService({ user: { create: async () => ({}) } } as any, { record: async () => undefined } as any);
+  const actor = { id: 'admin-a', permissions: ['users.manage'] };
+
+  await assert.rejects(
+    () => admin.createUser(actor, { username: '  ', password: 'valid-password', firstName: 'Test', lastName: 'User' }),
+    (error: any) => error?.response?.message === 'Username is required',
+  );
+
+  await assert.rejects(
+    () => admin.createUser(actor, { username: 'user', password: 'valid-password', firstName: 'Test', lastName: 'User', email: 'invalid' }),
+    (error: any) => error?.response?.message === 'Email address is invalid',
+  );
+});
