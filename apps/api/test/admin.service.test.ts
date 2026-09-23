@@ -86,6 +86,7 @@ test('system administrators can assign elevated administrative roles', async () 
     },
     role: { findUnique: async () => ({ id: 'role-admin', name: 'SYSTEM_ADMIN' }) },
     userRole: { upsert: async ({ create }: any) => create },
+    session: { deleteMany: async () => ({ count: 0 }) },
   } as any, { record: async (args: any) => args } as any);
 
   const result = await admin.assignRole({
