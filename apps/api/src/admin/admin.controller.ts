@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Req } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { RequirePermissions } from '../auth/permissions.decorator';
 
@@ -25,6 +25,12 @@ export class AdminController {
   @Post('users/:userId/roles')
   @RequirePermissions('roles.manage')
   assignRole(@Req() request: { user: { id: string; permissions: string[] } }, @Param('userId') userId: string, @Body() body: { roleId: string }) { return this.service.assignRole(request.user, userId, body.roleId); }
+
+  @Delete('users/:userId/roles/:roleId')
+  @RequirePermissions('roles.manage')
+  removeRole(@Req() request: { user: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null } }, @Param('userId') userId: string, @Param('roleId') roleId: string) {
+    return this.service.removeRole(request.user, userId, roleId);
+  }
 
   @Get('audit')
   @RequirePermissions('audit.read')
