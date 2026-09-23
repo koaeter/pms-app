@@ -10,7 +10,9 @@ function basePrisma(existingOrganisationId: string | null) {
     department: { findFirst: async () => null },
     designation: { findFirst: async () => null },
     employee: {
-      findUnique: async () => existingOrganisationId ? { id: 'employee-a', organisationId: existingOrganisationId } : null,
+      findUnique: async ({ where }: any) => existingOrganisationId
+        ? { id: where.id === 'employee-a' ? 'employee-a' : where.id, organisationId: existingOrganisationId, managerId: null }
+        : null,
       upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
     },
   };
@@ -38,3 +40,30 @@ test('system administrator can move an existing employee between organisations',
 
   assert.equal(result.organisationId, 'org-a');
 });
+
+test('employee manager assignment cannot create a reporting cycle', async () => {
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    user: { findUnique: async () => ({ id: 'user-a' }) },
+    department: { findFirst: async () => null },
+    designation: { findFirst: async () => null },
+    employee: {
+      findUnique: async ({ where }: any) => {
+        if (where.userId === 'user-a') return { id: 'employee-a', organisationId: 'org-a', managerId: 'employee-b' };
+        if (where.id === 'employee-b') return { id: 'employee-b', organisationId: 'org-a', managerId: 'employee-a' };
+        return null;
+      },
+      findFirst: async ({ where }: any) => ({ id: where.id, organisationId: where.organisationId }),
+      upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
+    },
+  };
+
+  await assert.rejects(
+    () => new OrganisationService(prisma as any).assignEmployee(
+      { userId: 'user-a', employeeNumber: 'E001', organisationId: 'org-a', managerId: 'employee-b' },
+      { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+    ),
+    (error: any) => error?.response?.message === 'Manager assignment would create an organisational reporting cycle',
+  );
+});
+
