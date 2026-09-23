@@ -19,7 +19,7 @@ function basePrisma(existingOrganisationId: string | null) {
 }
 
 test('scoped administrator cannot move an existing employee from another organisation', async () => {
-  const service = new OrganisationService(basePrisma('org-b') as any);
+  const service = new OrganisationService(basePrisma('org-b') as any, { record: async () => undefined } as any);
 
   await assert.rejects(
     () => service.assignEmployee(
@@ -83,7 +83,7 @@ test('department parent assignment cannot create a hierarchy cycle', async () =>
   };
 
   await assert.rejects(
-    () => new OrganisationService(prisma as any).updateDepartment(
+    () => new OrganisationService(prisma as any, { record: async () => undefined } as any).updateDepartment(
       'dept-a',
       { parentId: 'dept-b' },
       { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
