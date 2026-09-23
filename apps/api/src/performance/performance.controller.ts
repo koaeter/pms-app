@@ -173,9 +173,11 @@ export class PerformanceController {
       where: { organisationId, userId: { not: null }, user: { isActive: true } },
       include: { user: { include: { roles: { include: { role: true } } } } },
     });
-    return employees
-      .filter(({ user }) => user !== null && user.roles.some(({ role }) => ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)))
-      .map(({ user }) => user.id);
+    return employees.flatMap(({ user }) =>
+      user && user.roles.some(({ role }) => ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name))
+        ? [user.id]
+        : [],
+    );
   }
 
   @Post('plans/:planId/approve') @RequirePermissions('performance.approve')
