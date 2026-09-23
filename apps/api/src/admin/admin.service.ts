@@ -65,6 +65,27 @@ export class AdminService {
     return assignment;
   }
 
+  async removeRole(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, userId: string, roleId: string) {
+    this.require(actor, 'roles.manage');
+    const [user, role] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } }),
+      this.prisma.role.findUnique({ where: { id: roleId } }),
+    ]);
+    if (!user) throw new NotFoundException('User not found');
+    if (!role) throw new NotFoundException('Role not found');
+    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
+    if (actor.id === userId && ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)) {
+      throw new BadRequestException('You cannot remove an elevated role from your own account');
+    }
+    if (actor.roles?.includes('SYSTEM_ADMIN') === false && role.name === 'SYSTEM_ADMIN') {
+      throw new ForbiddenException('Only a system administrator can remove the system administrator role');
+    }
+    const result = await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
+    if (result.count !== 1) throw new NotFoundException('Role assignment not found');
+    await this.audit.record('USER_ROLE_REMOVED', 'User', userId, actor.id, { role: role.name, roleId });
+    return { userId, roleId, removed: true };
+  }
+
   async listAudit(user: { permissions: string[]; roles?: string[]; organisationId?: string | null }) {
     this.require(user, 'audit.read');
     if (user.roles?.includes('SYSTEM_ADMIN')) {
