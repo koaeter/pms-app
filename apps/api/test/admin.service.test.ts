@@ -88,6 +88,9 @@ test('the last system administrator role cannot be removed', async () => {
       deleteMany: async () => ({ count: 1 }),
     },
     session: { deleteMany: async () => ({ count: 1 }) },
+    $transaction: async (fn: any) => fn({
+      userRole: { count: async () => 1, deleteMany: async () => ({ count: 1 }) },
+    }),
   } as any, { record: async () => undefined } as any);
 
   await assert.rejects(
