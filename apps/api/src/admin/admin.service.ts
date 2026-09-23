@@ -243,12 +243,8 @@ export class AdminService {
       return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
     }
     if (!user.organisationId) return [];
-    const actors = await this.prisma.user.findMany({
-      where: { employee: { organisationId: user.organisationId } },
-      select: { id: true },
-    });
     return this.prisma.auditLog.findMany({
-      where: { actorId: { in: actors.map((actor) => actor.id) } },
+      where: { organisationId: user.organisationId },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
