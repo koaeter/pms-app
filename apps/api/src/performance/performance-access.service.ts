@@ -54,7 +54,7 @@ export class PerformanceAccessService {
     throw new ForbiddenException('Only performance administrators can manage this performance plan');
   }
 
-  filterVisiblePlans<T extends { employee: { userId: string; managerId: string | null; organisationId?: string | null } }>(plans: T[], user: ScopedUser) {
+  filterVisiblePlans<T extends { employee: { userId: string | null; managerId: string | null; organisationId?: string | null } }>(plans: T[], user: ScopedUser) {
     if (this.isSystemAdmin(user)) return plans;
     if (this.isScopedAdmin(user)) return plans.filter((plan) => plan.employee.organisationId === user.organisationId);
     return plans.filter((plan) => plan.employee.userId === user.id || plan.employee.managerId === user.employeeId);
