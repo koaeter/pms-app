@@ -35,7 +35,7 @@ test('scoped administrators can only list users in their organisation', async ()
     roles: ['HR_ADMIN'],
     organisationId: 'org-a',
   });
-  assert.deepEqual(where, { employee: { organisationId: 'org-a' } });
+  assert.deepEqual(where, { OR: [{ employee: { organisationId: 'org-a' } }, { provisioningOrganisationId: 'org-a' }] });
 });
 
 test('scoped administrators cannot change a user outside their organisation', async () => {
@@ -250,7 +250,7 @@ test('user creation rejects duplicate username or email cleanly', async () => {
 
   await assert.rejects(
     () => admin.createUser(
-      { id: 'admin-a', permissions: ['users.manage'] },
+      { id: 'admin-a', permissions: ['users.manage'], roles: ['SYSTEM_ADMIN'], organisationId: null },
       { username: 'existing', password: 'valid-password', firstName: 'Test', lastName: 'User' },
     ),
     (error: any) => error?.response?.message === 'Username or email is already in use',
@@ -259,7 +259,7 @@ test('user creation rejects duplicate username or email cleanly', async () => {
 
 test('user creation rejects blank identity fields and malformed email', async () => {
   const admin = new AdminService({ user: { create: async () => ({}) } } as any, { record: async () => undefined } as any);
-  const actor = { id: 'admin-a', permissions: ['users.manage'] };
+  const actor = { id: 'admin-a', permissions: ['users.manage'], roles: ['SYSTEM_ADMIN'], organisationId: null };
 
   await assert.rejects(
     () => admin.createUser(actor, { username: '  ', password: 'valid-password', firstName: 'Test', lastName: 'User' }),
@@ -270,4 +270,52 @@ test('user creation rejects blank identity fields and malformed email', async ()
     () => admin.createUser(actor, { username: 'user', password: 'valid-password', firstName: 'Test', lastName: 'User', email: 'invalid' }),
     (error: any) => error?.response?.message === 'Email address is invalid',
   );
+});
+
+
+test('scoped administrators create accounts pending assignment to their organisation', async () => {
+  let createdData: any;
+  const admin = new AdminService({
+    user: {
+      create: async ({ data }: any) => { createdData = data; return { id: 'user-a', username: data.username, firstName: data.firstName, lastName: data.lastName, email: data.email, isActive: true }; },
+    },
+  } as any, { record: async () => undefined } as any);
+
+  await admin.createUser(
+    { id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' },
+    { username: 'pending', password: 'valid-password', firstName: 'Pending', lastName: 'User' },
+  );
+  assert.equal(createdData.provisioningOrganisationId, 'org-a');
+});
+
+test('system administrators may create unassigned platform accounts', async () => {
+  let createdData: any;
+  const admin = new AdminService({
+    user: {
+      create: async ({ data }: any) => { createdData = data; return { id: 'user-a', username: data.username, firstName: data.firstName, lastName: data.lastName, email: data.email, isActive: true }; },
+    },
+  } as any, { record: async () => undefined } as any);
+  await admin.createUser(
+    { id: 'root', permissions: ['users.manage'], roles: ['SYSTEM_ADMIN'], organisationId: null },
+    { username: 'platform', password: 'valid-password', firstName: 'Platform', lastName: 'Account' },
+  );
+  assert.equal(createdData.provisioningOrganisationId, null);
+});
+
+test('an unlinked employee can receive a login account', async () => {
+  let employeeUpdated = false;
+  const admin = new AdminService({
+    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', user: null }) },
+    $transaction: async (fn: any) => fn({
+      user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
+      employee: { update: async () => { employeeUpdated = true; } },
+    }),
+  } as any, { record: async () => undefined } as any);
+  const result = await admin.createAccountForEmployee(
+    { id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' },
+    'employee-a',
+    { username: 'new-login', password: 'valid-password', firstName: 'New', lastName: 'Login' },
+  );
+  assert.equal(result.id, 'user-a');
+  assert.equal(employeeUpdated, true);
 });
