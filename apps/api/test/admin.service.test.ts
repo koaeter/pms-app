@@ -319,3 +319,24 @@ test('an unlinked employee can receive a login account', async () => {
   assert.equal(result.id, 'user-a');
   assert.equal(employeeUpdated, true);
 });
+
+
+test('employee account creation is conditional and does not overwrite a concurrent link', async () => {
+  let created = false;
+  const admin = new AdminService({
+    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', user: null }) },
+    $transaction: async (fn: any) => fn({
+      user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
+      employee: { updateMany: async () => ({ count: 0 }) },
+    }),
+  } as any, { record: async () => undefined } as any);
+  await assert.rejects(
+    () => admin.createAccountForEmployee(
+      { id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' },
+      'employee-a',
+      { username: 'new-login', password: 'valid-password', firstName: 'New', lastName: 'Login' },
+    ),
+    (error: any) => error?.response?.message === 'Employee was linked by another request',
+  );
+  assert.equal(created, false);
+});
