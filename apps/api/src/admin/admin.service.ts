@@ -79,9 +79,23 @@ export class AdminService {
     if (!actor.roles?.includes('SYSTEM_ADMIN') && ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)) {
       throw new ForbiddenException('Only a system administrator can assign elevated administrative roles');
     }
-    const assignment = await this.prisma.userRole.upsert({ where: { userId_roleId: { userId, roleId } }, update: {}, create: { userId, roleId } });
-    await this.prisma.session.deleteMany({ where: { userId } });
-    await this.audit.record('USER_ROLE_ASSIGNED', 'User', userId, actor.id, { role: role.name, roleId });
+    let assignment: { userId: string; roleId: string };
+    let created = false;
+    try {
+      assignment = await this.prisma.userRole.create({ data: { userId, roleId } });
+      created = true;
+    } catch (error: unknown) {
+      if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002')) {
+        throw error;
+      }
+      assignment = await this.prisma.userRole.findUniqueOrThrow({
+        where: { userId_roleId: { userId, roleId } },
+      });
+    }
+    if (created) {
+      await this.prisma.session.deleteMany({ where: { userId } });
+      await this.audit.record('USER_ROLE_ASSIGNED', 'User', userId, actor.id, { role: role.name, roleId });
+    }
     return assignment;
   }
 
