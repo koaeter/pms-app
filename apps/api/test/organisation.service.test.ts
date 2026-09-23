@@ -91,3 +91,16 @@ test('department parent assignment cannot create a hierarchy cycle', async () =>
     (error: any) => error?.response?.message === 'Department parent assignment would create a hierarchy cycle',
   );
 });
+
+test('organisation creation rejects blank name or code', async () => {
+  const service = new OrganisationService({ organisation: { create: async () => ({}) } } as any);
+
+  await assert.rejects(
+    () => service.createOrganisation({ name: '   ', code: 'ORG' }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] }),
+    (error: any) => error?.response?.message === 'Organisation name is required',
+  );
+  await assert.rejects(
+    () => service.createOrganisation({ name: 'Organisation', code: '   ' }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] }),
+    (error: any) => error?.response?.message === 'Organisation code is required',
+  );
+});
