@@ -36,5 +36,5 @@ test('system administrator can move an existing employee between organisations',
     { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] },
   );
 
-  assert.equal(result.update.organisationId, 'org-a');
+  assert.equal(result.organisationId, 'org-a');
 });
