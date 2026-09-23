@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 
@@ -42,8 +42,8 @@ export class AuthService {
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    if (newPassword.length < 10) throw new UnauthorizedException('New password must be at least 10 characters');
-    if (currentPassword === newPassword) throw new UnauthorizedException('New password must be different from the current password');
+    if (newPassword.length < 10) throw new BadRequestException('New password must be at least 10 characters');
+    if (currentPassword === newPassword) throw new BadRequestException('New password must be different from the current password');
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true, isActive: true } });
     if (!user || !user.isActive || !verifyPassword(currentPassword, user.passwordHash)) {
       throw new UnauthorizedException('Current password is incorrect');
