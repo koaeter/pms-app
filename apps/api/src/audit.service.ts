@@ -6,15 +6,19 @@ import { PrismaService } from './prisma.service';
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
-  record(
+  async record(
     action: string,
     entity: string,
     entityId: string | null,
     actorId: string | null,
     metadata?: Prisma.InputJsonValue,
   ) {
+    const actor = actorId
+      ? await this.prisma.user.findUnique({ where: { id: actorId }, select: { employee: { select: { organisationId: true } } } })
+      : null;
+    const organisationId = actor?.employee?.organisationId ?? null;
     return this.prisma.auditLog.create({
-      data: { action, entity, entityId, actorId, metadata },
+      data: { action, entity, entityId, actorId, organisationId, metadata },
     });
   }
 }
