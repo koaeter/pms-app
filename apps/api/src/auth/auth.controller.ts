@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 
@@ -17,6 +17,11 @@ export class AuthController {
     const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
     if (!token) throw new UnauthorizedException('Bearer token required');
     return this.auth.logout(token);
+  }
+
+  @Post('password')
+  changePassword(@Req() request: { user: { id: string } }, @Body() body: { currentPassword: string; newPassword: string }) {
+    return this.auth.changePassword(request.user.id, body.currentPassword, body.newPassword);
   }
 
   @Get('me')
