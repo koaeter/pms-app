@@ -15,6 +15,7 @@ function service() {
     },
     role: { findUnique: async () => ({ id: 'role-1', name: 'EMPLOYEE' }) },
     userRole: { upsert: async ({ create }: any) => create },
+    session: { deleteMany: async () => ({ count: 0 }) },
   } as any, { record: async () => undefined } as any);
 }
 
@@ -64,6 +65,7 @@ test('scoped administrators cannot assign elevated administrative roles', async 
     },
     role: { findUnique: async () => ({ id: 'role-admin', name: 'SYSTEM_ADMIN' }) },
     userRole: { upsert: async () => ({}) },
+    session: { deleteMany: async () => ({ count: 0 }) },
   } as any, { record: async () => undefined } as any);
 
   await assert.rejects(
@@ -117,6 +119,7 @@ test('scoped administrators can revoke an assigned non-elevated role in their or
     user: { findUnique: async () => ({ id: 'user-a', employee: { organisationId: 'org-a' } }) },
     role: { findUnique: async () => ({ id: 'role-employee', name: 'EMPLOYEE' }) },
     userRole: { deleteMany: async () => ({ count: 1 }) },
+    session: { deleteMany: async () => ({ count: 0 }) },
   } as any, { record: async (action: string) => ({ action }) } as any);
 
   const result = await admin.removeRole({
