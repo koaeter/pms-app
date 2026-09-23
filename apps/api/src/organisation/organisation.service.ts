@@ -226,7 +226,21 @@ export class OrganisationService {
         currentId = manager.managerId;
       }
     }
-    return this.prisma.employee.upsert({ where: { userId: data.userId }, create: { ...data, employeeNumber: data.employeeNumber.trim() }, update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId } });
+    const result = await this.prisma.employee.upsert({ where: { userId: data.userId }, create: { ...data, employeeNumber: data.employeeNumber.trim() }, update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId } });
+    if (existing && existing.organisationId !== data.organisationId) {
+      await this.audit?.record('EMPLOYEE_ORGANISATION_TRANSFERRED', 'Employee', result.id, user.id, {
+        userId: data.userId,
+        fromOrganisationId: existing.organisationId,
+        toOrganisationId: data.organisationId,
+      });
+    } else if (!existing) {
+      await this.audit?.record('EMPLOYEE_CREATED', 'Employee', result.id, user.id, {
+        employeeNumber: result.employeeNumber,
+        organisationId: result.organisationId,
+        userId: data.userId,
+      });
+    }
+    return result;
   }
 
   private async requireOrganisationAccess(id: string, user: OrganisationUser) {
