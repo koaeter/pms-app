@@ -23,18 +23,21 @@ export class PerformanceAssignmentService {
     });
 
     return employees
-      .filter((employee) => employee.user !== null && employee.user.roles.some(({ role }) =>
-        ['PERFORMANCE_REVIEWER', 'SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name),
-      ))
-      .map((employee) => ({
-        id: employee.id,
-        employeeNumber: employee.employeeNumber,
-        firstName: employee.user.firstName,
-        lastName: employee.user.lastName,
-        department: employee.department?.name ?? null,
-        designation: employee.designation?.name ?? null,
-        roles: employee.user.roles.map(({ role }) => role.name),
-      }));
+      .map((employee) => {
+        if (!employee.user || !employee.user.roles.some(({ role }) =>
+          ['PERFORMANCE_REVIEWER', 'SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name),
+        )) return null;
+        return {
+          id: employee.id,
+          employeeNumber: employee.employeeNumber,
+          firstName: employee.user.firstName,
+          lastName: employee.user.lastName,
+          department: employee.department?.name ?? null,
+          designation: employee.designation?.name ?? null,
+          roles: employee.user.roles.map(({ role }) => role.name),
+        };
+      })
+      .filter((employee): employee is NonNullable<typeof employee> => employee !== null);
   }
 
   async assignAssessors(
