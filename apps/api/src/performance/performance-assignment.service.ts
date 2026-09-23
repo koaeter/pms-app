@@ -13,7 +13,7 @@ export class PerformanceAssignmentService {
   async listCandidates(organisationId: string, user: AssignmentUser) {
     this.assertAdmin(user);
     const employees = await this.prisma.employee.findMany({
-      where: { organisationId, userId: { not: null }, user: { isActive: true } },
+      where: { organisationId, employmentStatus: 'ACTIVE', userId: { not: null }, user: { isActive: true } },
       include: {
         user: { include: { roles: { include: { role: true } } } },
         department: true,
@@ -76,7 +76,7 @@ export class PerformanceAssignmentService {
     const ids = [...new Set([reviewerId, finalAssessorId].filter((id): id is string => Boolean(id)))];
     const candidates = ids.length
       ? await this.prisma.employee.findMany({
-          where: { id: { in: ids }, userId: { not: null } },
+          where: { id: { in: ids }, employmentStatus: 'ACTIVE', userId: { not: null } },
           include: { user: { include: { roles: { include: { role: true } } } } },
         })
       : [];
