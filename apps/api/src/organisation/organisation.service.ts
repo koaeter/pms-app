@@ -104,6 +104,18 @@ export class OrganisationService {
       throw new ForbiddenException('Only a system administrator can move an employee between organisations');
     }
     if (existing && data.managerId === existing.id) throw new BadRequestException('An employee cannot be their own manager');
+    if (data.managerId) {
+      const visited = new Set<string>();
+      let currentId: string | null = data.managerId;
+      while (currentId) {
+        if (currentId === existing?.id) throw new BadRequestException('Manager assignment would create an organisational reporting cycle');
+        if (visited.has(currentId)) throw new BadRequestException('Manager assignment contains an organisational reporting cycle');
+        visited.add(currentId);
+        const manager = await this.prisma.employee.findUnique({ where: { id: currentId }, select: { id: true, managerId: true, organisationId: true } });
+        if (!manager || manager.organisationId !== data.organisationId) break;
+        currentId = manager.managerId;
+      }
+    }
     return this.prisma.employee.upsert({ where: { userId: data.userId }, create: { ...data, employeeNumber: data.employeeNumber.trim() }, update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId } });
   }
 
