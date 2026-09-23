@@ -7,7 +7,7 @@ type OrganisationUser = { id: string; organisationId?: string | null; roles: str
 
 @Injectable()
 export class OrganisationService {
-  constructor(private readonly prisma: PrismaService, private readonly audit: AuditService) {}
+  constructor(private readonly prisma: PrismaService, private readonly audit?: AuditService) {}
 
   listOrganisations(user: OrganisationUser) {
     const where = user.roles.includes('SYSTEM_ADMIN') ? undefined : { id: user.organisationId ?? '__none__' };
@@ -151,7 +151,7 @@ export class OrganisationService {
         });
         return { user: createdUser, employee };
       }).then(async (result) => {
-        await this.audit.record('EMPLOYEE_ACCOUNT_PROVISIONED', 'Employee', result.employee.id, user.id, { userId: result.user.id, username: result.user.username });
+        await this.audit?.record('EMPLOYEE_ACCOUNT_PROVISIONED', 'Employee', result.employee.id, user.id, { userId: result.user.id, username: result.user.username });
         return result;
       });
     } catch (error: unknown) {
@@ -191,7 +191,7 @@ export class OrganisationService {
       const employee = await this.prisma.employee.create({
         data: { employeeNumber, organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId },
       });
-      await this.audit.record('EMPLOYEE_CREATED', 'Employee', employee.id, user.id, { employeeNumber, organisationId: data.organisationId });
+      await this.audit?.record('EMPLOYEE_CREATED', 'Employee', employee.id, user.id, { employeeNumber, organisationId: data.organisationId });
       return employee;
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
