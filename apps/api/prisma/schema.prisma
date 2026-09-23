@@ -374,6 +374,7 @@ model PerformanceAssessmentItem {
 
 model AuditLog {
   id String @id @default(uuid())
+  organisationId String?
   actorId String?
   action String
   entity String
@@ -382,4 +383,5 @@ model AuditLog {
   createdAt DateTime @default(now())
   @@index([entity, entityId])
   @@index([actorId, createdAt])
+  @@index([organisationId, createdAt])
 }
