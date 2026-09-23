@@ -18,7 +18,11 @@ export class OrganisationService {
 
   async createOrganisation(data: { name: string; code: string; description?: string }, user: OrganisationUser) {
     if (!user.roles.includes('SYSTEM_ADMIN')) throw new ForbiddenException('Only system administrators can create organisations');
-    return this.prisma.organisation.create({ data: { ...data, name: data.name.trim(), code: data.code.trim().toUpperCase() } });
+    const name = data.name.trim();
+    const code = data.code.trim().toUpperCase();
+    if (!name) throw new BadRequestException('Organisation name is required');
+    if (!code) throw new BadRequestException('Organisation code is required');
+    return this.prisma.organisation.create({ data: { ...data, name, code } });
   }
 
   async updateOrganisation(id: string, data: { name?: string; code?: string; description?: string; isActive?: boolean }, user: OrganisationUser) {
@@ -41,11 +45,15 @@ export class OrganisationService {
 
   async createDepartment(data: { organisationId: string; name: string; code: string; parentId?: string }, user: OrganisationUser) {
     await this.requireOrganisationAccess(data.organisationId, user);
+    const name = data.name.trim();
+    const code = data.code.trim().toUpperCase();
+    if (!name) throw new BadRequestException('Department name is required');
+    if (!code) throw new BadRequestException('Department code is required');
     if (data.parentId) {
       const parent = await this.prisma.department.findFirst({ where: { id: data.parentId, organisationId: data.organisationId } });
       if (!parent) throw new NotFoundException('Parent department not found in this organisation');
     }
-    return this.prisma.department.create({ data: { ...data, name: data.name.trim(), code: data.code.trim().toUpperCase() } });
+    return this.prisma.department.create({ data: { ...data, name, code } });
   }
 
   async updateDepartment(id: string, data: { name?: string; code?: string; parentId?: string | null }, user: OrganisationUser) {
@@ -77,7 +85,10 @@ export class OrganisationService {
 
   async createDesignation(data: { organisationId: string; name: string; code?: string; grade?: string }, user: OrganisationUser) {
     await this.requireOrganisationAccess(data.organisationId, user);
-    return this.prisma.designation.create({ data: { ...data, name: data.name.trim(), code: data.code?.trim().toUpperCase() || undefined } });
+    const name = data.name.trim();
+    const code = data.code?.trim().toUpperCase() || undefined;
+    if (!name) throw new BadRequestException('Designation name is required');
+    return this.prisma.designation.create({ data: { ...data, name, code } });
   }
 
   async updateDesignation(id: string, data: { name?: string; code?: string | null; grade?: string | null }, user: OrganisationUser) {
