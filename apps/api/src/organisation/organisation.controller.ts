@@ -50,6 +50,12 @@ export class OrganisationController {
   @RequirePermissions('users.manage')
   assignEmployee(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { userId: string; employeeNumber: string; departmentId?: string; designationId?: string; managerId?: string }) { return this.service.assignEmployee({ ...body, organisationId }, request.user); }
 
+  @Post(':organisationId/employees/provision')
+  @RequirePermissions('users.manage')
+  createEmployeeWithAccount(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { username: string; password: string; firstName: string; lastName: string; email?: string; employeeNumber: string; departmentId?: string; designationId?: string; managerId?: string }) {
+    return this.service.createEmployeeWithAccount({ ...body, organisationId }, request.user);
+  }
+
   @Post(':organisationId/employees/unlinked')
   @RequirePermissions('users.manage')
   createEmployee(@Param('organisationId') organisationId: string, @Req() request: { user: any }, @Body() body: { employeeNumber: string; departmentId?: string; designationId?: string; managerId?: string }) {
