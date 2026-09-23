@@ -42,6 +42,7 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
     const updated = await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
+    if (!isActive) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
     return updated;
   }
@@ -61,6 +62,7 @@ export class AdminService {
       throw new ForbiddenException('Only a system administrator can assign elevated administrative roles');
     }
     const assignment = await this.prisma.userRole.upsert({ where: { userId_roleId: { userId, roleId } }, update: {}, create: { userId, roleId } });
+    await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_ROLE_ASSIGNED', 'User', userId, actor.id, { role: role.name, roleId });
     return assignment;
   }
@@ -82,6 +84,7 @@ export class AdminService {
     }
     const result = await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
     if (result.count !== 1) throw new NotFoundException('Role assignment not found');
+    await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_ROLE_REMOVED', 'User', userId, actor.id, { role: role.name, roleId });
     return { userId, roleId, removed: true };
   }
