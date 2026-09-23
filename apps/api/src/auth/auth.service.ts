@@ -47,10 +47,6 @@ export class AuthService {
     return { success: true };
   }
 
-  async logoutAll(userId: string) {
-    await this.prisma.session.deleteMany({ where: { userId } });
-    return { success: true };
-  }
 
   async currentUser(token: string) {
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -62,13 +58,6 @@ export class AuthService {
     return this.presentUser(session.user);
   }
 
-  async revokeUserSessions(actor: { id: string; permissions: string[] }, userId: string) {
-    if (!actor.permissions.includes('users.manage')) throw new UnauthorizedException('Insufficient permission');
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-    if (!user) throw new UnauthorizedException('User not found');
-    await this.prisma.session.deleteMany({ where: { userId } });
-    return { success: true };
-  }
 
   private presentUser(user: any) {
     const roles = user.roles.map((entry: any) => entry.role.name);
