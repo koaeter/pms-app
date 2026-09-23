@@ -27,11 +27,15 @@ export class OrganisationService {
 
   async updateOrganisation(id: string, data: { name?: string; code?: string; description?: string; isActive?: boolean }, user: OrganisationUser) {
     await this.requireOrganisationAccess(id, user);
+    const name = data.name?.trim();
+    const code = data.code?.trim().toUpperCase();
+    if (data.name !== undefined && !name) throw new BadRequestException('Organisation name is required');
+    if (data.code !== undefined && !code) throw new BadRequestException('Organisation code is required');
     return this.prisma.organisation.update({
       where: { id },
       data: {
-        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-        ...(data.code !== undefined ? { code: data.code.trim().toUpperCase() } : {}),
+        ...(name !== undefined ? { name } : {}),
+        ...(code !== undefined ? { code } : {}),
         ...(data.description !== undefined ? { description: data.description } : {}),
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       },
@@ -75,7 +79,11 @@ export class OrganisationService {
         currentId = current.parentId;
       }
     }
-    return this.prisma.department.update({ where: { id }, data: { ...(data.name !== undefined ? { name: data.name.trim() } : {}), ...(data.code !== undefined ? { code: data.code.trim().toUpperCase() } : {}), ...(data.parentId !== undefined ? { parentId: data.parentId } : {}) } });
+    const name = data.name?.trim();
+    const code = data.code?.trim().toUpperCase();
+    if (data.name !== undefined && !name) throw new BadRequestException('Department name is required');
+    if (data.code !== undefined && !code) throw new BadRequestException('Department code is required');
+    return this.prisma.department.update({ where: { id }, data: { ...(name !== undefined ? { name } : {}), ...(code !== undefined ? { code } : {}), ...(data.parentId !== undefined ? { parentId: data.parentId } : {}) } });
   }
 
   async listDesignations(organisationId: string, user: OrganisationUser) {
@@ -95,7 +103,10 @@ export class OrganisationService {
     const designation = await this.prisma.designation.findUnique({ where: { id } });
     if (!designation) throw new NotFoundException('Designation not found');
     await this.requireOrganisationAccess(designation.organisationId, user);
-    return this.prisma.designation.update({ where: { id }, data: { ...(data.name !== undefined ? { name: data.name.trim() } : {}), ...(data.code !== undefined ? { code: data.code?.trim().toUpperCase() || null } : {}), ...(data.grade !== undefined ? { grade: data.grade } : {}) } });
+    const name = data.name?.trim();
+    const code = data.code?.trim().toUpperCase() || null;
+    if (data.name !== undefined && !name) throw new BadRequestException('Designation name is required');
+    return this.prisma.designation.update({ where: { id }, data: { ...(name !== undefined ? { name } : {}), ...(data.code !== undefined ? { code } : {}), ...(data.grade !== undefined ? { grade: data.grade } : {}) } });
   }
 
   async listEmployees(organisationId: string, user: OrganisationUser) {
