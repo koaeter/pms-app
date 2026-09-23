@@ -15,6 +15,7 @@ function service() {
     },
     role: { findUnique: async () => ({ id: 'role-1', name: 'EMPLOYEE' }) },
     userRole: {
+      count: async () => 0,
       create: async ({ data }: any) => data,
       findUniqueOrThrow: async ({ where }: any) => where.userId_roleId,
     },
@@ -46,6 +47,52 @@ test('scoped administrators cannot change a user outside their organisation', as
       organisationId: 'org-a',
     }, 'user-b', false),
     (error: unknown) => error instanceof ForbiddenException,
+  );
+});
+
+test('the last active system administrator cannot be deactivated', async () => {
+  const admin = new AdminService({
+    user: {
+      findUnique: async () => ({ id: 'root', isActive: true, employee: { organisationId: 'org-a' } }),
+      update: async () => ({ id: 'root', username: 'root', isActive: false }),
+    },
+    role: { findUnique: async () => ({ id: 'role-system', name: 'SYSTEM_ADMIN' }) },
+    userRole: {
+      count: async ({ where }: any) => where.userId === 'root' ? 1 : 1,
+    },
+    session: { deleteMany: async () => ({ count: 1 }) },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.setUserStatus({
+      id: 'admin-a',
+      permissions: ['users.manage'],
+      roles: ['SYSTEM_ADMIN'],
+      organisationId: null,
+    }, 'root', false),
+    (error: any) => error?.response?.message === 'At least one active system administrator account must remain',
+  );
+});
+
+test('the last system administrator role cannot be removed', async () => {
+  const admin = new AdminService({
+    user: { findUnique: async () => ({ id: 'root', employee: { organisationId: 'org-a' } }) },
+    role: { findUnique: async () => ({ id: 'role-system', name: 'SYSTEM_ADMIN' }) },
+    userRole: {
+      count: async () => 1,
+      deleteMany: async () => ({ count: 1 }),
+    },
+    session: { deleteMany: async () => ({ count: 1 }) },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.removeRole({
+      id: 'root-2',
+      permissions: ['roles.manage'],
+      roles: ['SYSTEM_ADMIN'],
+      organisationId: null,
+    }, 'root', 'role-system'),
+    (error: any) => error?.response?.message === 'At least one system administrator role assignment must remain',
   );
 });
 
