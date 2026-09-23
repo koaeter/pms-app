@@ -42,8 +42,9 @@ export class ReportsService {
     if (!employee.organisationId) throw new NotFoundException('Employee is not assigned to an organisation');
     await this.requireOrganisationAccess(employee.organisationId, user);
 
+    const cycleScope = user.roles.includes('SYSTEM_ADMIN') ? undefined : { organisationId: employee.organisationId };
     return this.prisma.performancePlan.findMany({
-      where: { employeeId, cycle: { organisationId: employee.organisationId } },
+      where: { employeeId, ...(cycleScope ? { cycle: cycleScope } : {}) },
       orderBy: { cycle: { startsAt: 'desc' } },
       include: {
         cycle: { select: { id: true, name: true, startsAt: true, endsAt: true, status: true, programme: { select: { name: true, code: true } }, reviewType: { select: { name: true, code: true } } } },
