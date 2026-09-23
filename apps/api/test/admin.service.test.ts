@@ -308,7 +308,7 @@ test('an unlinked employee can receive a login account', async () => {
     employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', user: null }) },
     $transaction: async (fn: any) => fn({
       user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
-      employee: { update: async () => { employeeUpdated = true; } },
+      employee: { updateMany: async () => { employeeUpdated = true; return { count: 1 }; } },
     }),
   } as any, { record: async () => undefined } as any);
   const result = await admin.createAccountForEmployee(
