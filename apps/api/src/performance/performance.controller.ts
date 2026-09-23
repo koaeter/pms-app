@@ -161,7 +161,7 @@ export class PerformanceController {
     await Promise.all(uniqueRecipients.map((userId) => this.notifications.notify(
       userId,
       body.assessorType === 'FINAL' ? 'Performance assessment ready for approval' : 'Performance assessment submitted',
-      `${body.assessorType} assessment for ${plan.employee.user.firstName} ${plan.employee.user.lastName} has been submitted.`,
+      `${body.assessorType} assessment for ${plan.employee.user?.firstName ?? 'Employee'} ${plan.employee.user?.lastName ?? ''} has been submitted.`,
       `/performance/${planId}`,
     )));
     return result;
