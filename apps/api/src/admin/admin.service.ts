@@ -28,7 +28,7 @@ export class AdminService {
             { provisioningOrganisationId: user.organisationId ?? '__none__' },
           ],
         };
-    return this.prisma.user.findMany({ where, orderBy: { username: 'asc' }, select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true, roles: { include: { role: true } }, employee: { include: { organisation: true, department: true, designation: true, manager: { include: { user: true } } } } } });
+    return this.prisma.user.findMany({ where, orderBy: { username: 'asc' }, select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true, provisioningOrganisationId: true, roles: { include: { role: true } }, employee: { include: { organisation: true, department: true, designation: true, manager: { include: { user: true } } } } } });
   }
 
   async createUser(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, data: { username: string; password: string; firstName: string; lastName: string; email?: string; provisioningOrganisationId?: string | null }) {
@@ -71,6 +71,7 @@ export class AdminService {
 
   async linkUserToEmployee(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, userId: string, employeeId: string) {
     this.require(actor, 'users.manage');
+
     const [user, employee] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } }),
       this.prisma.employee.findUnique({ where: { id: employeeId } }),
@@ -83,14 +84,23 @@ export class AdminService {
     if (employee.userId && employee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
 
     const linked = await this.prisma.$transaction(async (tx: any) => {
-      const updatedEmployee = await tx.employee.update({
-        where: { id: employeeId },
+      const freshEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, employeeNumber: true, userId: true, organisationId: true } });
+      const freshUser = await tx.user.findUnique({ where: { id: userId }, select: { id: true, employee: { select: { id: true } }, provisioningOrganisationId: true } });
+      if (!freshEmployee || !freshUser) throw new NotFoundException('User or employee not found');
+      if (freshEmployee.userId && freshEmployee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
+      if (freshUser.employee && freshUser.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
+
+      const result = await tx.employee.updateMany({
+        where: { id: employeeId, userId: null },
         data: { userId },
-        select: { id: true, employeeNumber: true, userId: true, organisationId: true },
       });
+      if (result.count !== 1 && freshEmployee.userId !== userId) {
+        throw new BadRequestException('Employee was linked by another request');
+      }
       await tx.user.update({ where: { id: userId }, data: { provisioningOrganisationId: null } });
-      return updatedEmployee;
-    });
+      return tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, employeeNumber: true, userId: true, organisationId: true } });
+    }, { isolationLevel: 'Serializable' });
+
     await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_EMPLOYEE_LINKED', 'Employee', employeeId, actor.id, { userId });
     return linked;
