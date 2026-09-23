@@ -20,11 +20,18 @@ export class AdminService {
 
   listUsers(user: { permissions: string[]; roles?: string[]; organisationId?: string | null }) {
     this.require(user, 'users.read');
-    const where = user.roles?.includes('SYSTEM_ADMIN') ? undefined : { employee: { organisationId: user.organisationId ?? '__none__' } };
+    const where = user.roles?.includes('SYSTEM_ADMIN')
+      ? undefined
+      : {
+          OR: [
+            { employee: { organisationId: user.organisationId ?? '__none__' } },
+            { provisioningOrganisationId: user.organisationId ?? '__none__' },
+          ],
+        };
     return this.prisma.user.findMany({ where, orderBy: { username: 'asc' }, select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true, createdAt: true, roles: { include: { role: true } }, employee: { include: { organisation: true, department: true, designation: true, manager: { include: { user: true } } } } } });
   }
 
-  async createUser(actor: { id: string; permissions: string[] }, data: { username: string; password: string; firstName: string; lastName: string; email?: string }) {
+  async createUser(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, data: { username: string; password: string; firstName: string; lastName: string; email?: string; provisioningOrganisationId?: string | null }) {
     this.require(actor, 'users.manage');
 
     const username = data.username.trim();
@@ -38,13 +45,84 @@ export class AdminService {
     if (email && !/^\\S+@\\S+\\.\\S+$/.test(email)) throw new BadRequestException('Email address is invalid');
     if (data.password.length < 10) throw new BadRequestException('Password must be at least 10 characters');
 
+    const isSystemAdmin = actor.roles?.includes('SYSTEM_ADMIN');
+    const provisioningOrganisationId = isSystemAdmin
+      ? (data.provisioningOrganisationId ?? null)
+      : actor.organisationId ?? null;
+    if (!isSystemAdmin && !actor.organisationId) {
+      throw new ForbiddenException('Your account is not associated with an organisation');
+    }
+    if (provisioningOrganisationId) this.requireTargetOrganisation(actor, provisioningOrganisationId);
+
     try {
       const user = await this.prisma.user.create({
-        data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
+        data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email, provisioningOrganisationId },
         select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
       });
       await this.audit.record('USER_CREATED', 'User', user.id, actor.id, { username: user.username });
       return user;
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+        throw new BadRequestException('Username or email is already in use');
+      }
+      throw error;
+    }
+  }
+
+  async linkUserToEmployee(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, userId: string, employeeId: string) {
+    this.require(actor, 'users.manage');
+    const [user, employee] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } }),
+      this.prisma.employee.findUnique({ where: { id: employeeId } }),
+    ]);
+    if (!user) throw new NotFoundException('User not found');
+    if (!employee) throw new NotFoundException('Employee not found');
+    this.requireTargetOrganisation(actor, employee.organisationId ?? null);
+    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
+    if (user.employee && user.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
+    if (employee.userId && employee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
+
+    const linked = await this.prisma.$transaction(async (tx: any) => {
+      const updatedEmployee = await tx.employee.update({
+        where: { id: employeeId },
+        data: { userId },
+        select: { id: true, employeeNumber: true, userId: true, organisationId: true },
+      });
+      await tx.user.update({ where: { id: userId }, data: { provisioningOrganisationId: null } });
+      return updatedEmployee;
+    });
+    await this.prisma.session.deleteMany({ where: { userId } });
+    await this.audit.record('USER_EMPLOYEE_LINKED', 'Employee', employeeId, actor.id, { userId });
+    return linked;
+  }
+
+  async createAccountForEmployee(actor: { id: string; permissions: string[]; roles?: string[]; organisationId?: string | null }, employeeId: string, data: { username: string; password: string; firstName?: string; lastName?: string; email?: string }) {
+    this.require(actor, 'users.manage');
+    const employee = await this.prisma.employee.findUnique({ where: { id: employeeId }, include: { user: true } });
+    if (!employee) throw new NotFoundException('Employee not found');
+    this.requireTargetOrganisation(actor, employee.organisationId ?? null);
+    if (employee.userId) throw new BadRequestException('Employee already has a user account');
+
+    const username = data.username.trim();
+    const firstName = data.firstName?.trim() || employee.user?.firstName || 'Employee';
+    const lastName = data.lastName?.trim() || employee.user?.lastName || '';
+    const email = data.email?.trim() || undefined;
+    if (!username) throw new BadRequestException('Username is required');
+    if (!lastName) throw new BadRequestException('Last name is required');
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) throw new BadRequestException('Email address is invalid');
+    if (data.password.length < 10) throw new BadRequestException('Password must be at least 10 characters');
+
+    try {
+      const created = await this.prisma.$transaction(async (tx: any) => {
+        const createdUser = await tx.user.create({
+          data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
+          select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
+        });
+        await tx.employee.update({ where: { id: employeeId }, data: { userId: createdUser.id } });
+        return createdUser;
+      });
+      await this.audit.record('EMPLOYEE_ACCOUNT_CREATED', 'Employee', employeeId, actor.id, { userId: created.id, username: created.username });
+      return created;
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
         throw new BadRequestException('Username or email is already in use');
@@ -58,7 +136,7 @@ export class AdminService {
     if (actor.id === userId && !isActive) throw new BadRequestException('You cannot deactivate your own account');
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
-    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
+    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     const updated = !isActive && user.isActive
       ? await this.prisma.$transaction(async (tx: any) => {
           const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
@@ -94,7 +172,7 @@ export class AdminService {
     const [user, role] = await Promise.all([this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } }), this.prisma.role.findUnique({ where: { id: roleId } })]);
     if (!user) throw new NotFoundException('User not found');
     if (!role) throw new NotFoundException('Role not found');
-    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
+    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     if (!actor.roles?.includes('SYSTEM_ADMIN') && ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)) {
       throw new ForbiddenException('Only a system administrator can assign elevated administrative roles');
     }
@@ -126,7 +204,7 @@ export class AdminService {
     ]);
     if (!user) throw new NotFoundException('User not found');
     if (!role) throw new NotFoundException('Role not found');
-    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
+    this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     if (actor.id === userId && ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name)) {
       throw new BadRequestException('You cannot remove an elevated role from your own account');
     }
