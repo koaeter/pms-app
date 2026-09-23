@@ -67,3 +67,27 @@ test('employee manager assignment cannot create a reporting cycle', async () => 
   );
 });
 
+
+test('department parent assignment cannot create a hierarchy cycle', async () => {
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    department: {
+      findUnique: async ({ where }: any) => {
+        if (where.id === 'dept-a') return { id: 'dept-a', parentId: 'dept-b', organisationId: 'org-a' };
+        if (where.id === 'dept-b') return { id: 'dept-b', parentId: null, organisationId: 'org-a' };
+        return null;
+      },
+      findFirst: async () => ({ id: 'dept-b', organisationId: 'org-a' }),
+      update: async () => ({ id: 'dept-a' }),
+    },
+  };
+
+  await assert.rejects(
+    () => new OrganisationService(prisma as any).updateDepartment(
+      'dept-a',
+      { parentId: 'dept-b' },
+      { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+    ),
+    (error: any) => error?.response?.message === 'Department parent assignment would create a hierarchy cycle',
+  );
+});
