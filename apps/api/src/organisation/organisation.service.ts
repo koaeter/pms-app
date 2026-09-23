@@ -123,6 +123,46 @@ export class OrganisationService {
     });
   }
 
+  async createEmployee(data: { employeeNumber: string; organisationId: string; departmentId?: string; designationId?: string; managerId?: string }, user: OrganisationUser) {
+    await this.requireOrganisationAccess(data.organisationId, user);
+    const employeeNumber = data.employeeNumber.trim();
+    if (!employeeNumber) throw new BadRequestException('Employee number is required');
+    if (data.departmentId && !(await this.prisma.department.findFirst({ where: { id: data.departmentId, organisationId: data.organisationId } }))) {
+      throw new NotFoundException('Department not found in this organisation');
+    }
+    if (data.designationId && !(await this.prisma.designation.findFirst({ where: { id: data.designationId, organisationId: data.organisationId } }))) {
+      throw new NotFoundException('Designation not found in this organisation');
+    }
+    if (data.managerId && !(await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId } }))) {
+      throw new NotFoundException('Manager not found in this organisation');
+    }
+    if (data.managerId) {
+      const visited = new Set<string>();
+      let currentId: string | null = data.managerId;
+      while (currentId) {
+        if (visited.has(currentId)) throw new BadRequestException('Manager assignment contains an organisational reporting cycle');
+        visited.add(currentId);
+        const manager: { id: string; managerId: string | null; organisationId: string | null } | null = await this.prisma.employee.findUnique({
+          where: { id: currentId },
+          select: { id: true, managerId: true, organisationId: true },
+        });
+        if (!manager || manager.organisationId !== data.organisationId) break;
+        currentId = manager.managerId;
+      }
+    }
+    try {
+      const employee = await this.prisma.employee.create({
+        data: { employeeNumber, organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId },
+      });
+      return employee;
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+        throw new BadRequestException('Employee number is already in use');
+      }
+      throw error;
+    }
+  }
+
   async assignEmployee(data: { userId: string; employeeNumber: string; organisationId: string; departmentId?: string; designationId?: string; managerId?: string }, user: OrganisationUser) {
     await this.requireOrganisationAccess(data.organisationId, user);
     const targetUser = await this.prisma.user.findUnique({ where: { id: data.userId } });
