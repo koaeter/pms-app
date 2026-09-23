@@ -14,6 +14,9 @@ export default function Dashboard() {
   const [teamPlans, setTeamPlans] = useState<Plan[]>([]);
   const [unread, setUnread] = useState(0);
   const [message, setMessage] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
 
   async function request(path: string) {
     const token = localStorage.getItem('pms_token');
@@ -57,6 +60,28 @@ export default function Dashboard() {
       </section>
       <section className="card"><h2>Reports</h2><p>Administrative reporting is available to authorised users.</p>{user.roles.some(r => ['SYSTEM_ADMIN', 'PERFORMANCE_ADMIN', 'HR_ADMIN'].includes(r)) && <button className="button secondary" onClick={() => router.push('/admin/reports')}>Open reports</button>}</section>
     </div>
+    <section className="card">
+      <h2>Change password</h2>
+      <p className="muted">Changing your password signs out all active sessions.</p>
+      {passwordMessage && <p className="muted">{passwordMessage}</p>}
+      <div className="grid">
+        <label>Current password<input className="input" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} /></label>
+        <label>New password<input className="input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></label>
+      </div>
+      <button className="button secondary" onClick={async () => {
+        setPasswordMessage('');
+        const token = localStorage.getItem('pms_token');
+        if (!token) { router.replace('/login'); return; }
+        const response = await fetch(`${API_URL}/auth/password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        if (!response.ok) { setPasswordMessage(await response.text() || 'Unable to change password.'); return; }
+        localStorage.removeItem('pms_token');
+        router.replace('/login');
+      }}>Change password</button>
+    </section>
     <button className="button secondary" onClick={async () => { const token = localStorage.getItem('pms_token'); if (token) await fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined); localStorage.removeItem('pms_token'); router.push('/login'); }}>Sign out</button>
   </section></main>;
 }
