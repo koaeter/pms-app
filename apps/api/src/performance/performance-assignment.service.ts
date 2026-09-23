@@ -23,7 +23,7 @@ export class PerformanceAssignmentService {
     });
 
     return employees
-      .filter((employee) => employee.user.roles.some(({ role }) =>
+      .filter((employee) => employee.user !== null && employee.user.roles.some(({ role }) =>
         ['PERFORMANCE_REVIEWER', 'SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'].includes(role.name),
       ))
       .map((employee) => ({
@@ -73,7 +73,7 @@ export class PerformanceAssignmentService {
     const ids = [...new Set([reviewerId, finalAssessorId].filter((id): id is string => Boolean(id)))];
     const candidates = ids.length
       ? await this.prisma.employee.findMany({
-          where: { id: { in: ids } },
+          where: { id: { in: ids }, userId: { not: null } },
           include: { user: { include: { roles: { include: { role: true } } } } },
         })
       : [];
@@ -81,6 +81,7 @@ export class PerformanceAssignmentService {
     if (candidates.length !== ids.length) throw new NotFoundException('One or more assigned assessors could not be found');
 
     for (const candidate of candidates) {
+      if (!candidate.user) throw new BadRequestException('Assigned assessors must have user accounts');
       if (!candidate.organisationId || candidate.organisationId !== plan.employee.organisationId) {
         throw new BadRequestException('Assigned assessors must belong to the same organisation as the performance plan');
       }
