@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { createPasswordHash } from '../auth/auth.service';
 
 type OrganisationUser = { id: string; organisationId?: string | null; roles: string[] };
 
@@ -121,6 +122,38 @@ export class OrganisationService {
         manager: { select: { id: true, employeeNumber: true, user: { select: { firstName: true, lastName: true } } } },
       },
     });
+  }
+
+  async createEmployeeWithAccount(data: { username: string; password: string; firstName: string; lastName: string; email?: string; employeeNumber: string; organisationId: string; departmentId?: string; designationId?: string; managerId?: string }, user: OrganisationUser) {
+    await this.requireOrganisationAccess(data.organisationId, user);
+    const username = data.username.trim();
+    const firstName = data.firstName.trim();
+    const lastName = data.lastName.trim();
+    const email = data.email?.trim() || undefined;
+    const employeeNumber = data.employeeNumber.trim();
+    if (!username || !firstName || !lastName || !employeeNumber) throw new BadRequestException('Username, name and employee number are required');
+    if (data.password.length < 10) throw new BadRequestException('Password must be at least 10 characters');
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) throw new BadRequestException('Email address is invalid');
+    if (data.departmentId && !(await this.prisma.department.findFirst({ where: { id: data.departmentId, organisationId: data.organisationId } }))) throw new NotFoundException('Department not found in this organisation');
+    if (data.designationId && !(await this.prisma.designation.findFirst({ where: { id: data.designationId, organisationId: data.organisationId } }))) throw new NotFoundException('Designation not found in this organisation');
+    if (data.managerId && !(await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId } }))) throw new NotFoundException('Manager not found in this organisation');
+
+    try {
+      return await this.prisma.$transaction(async (tx: any) => {
+        const createdUser = await tx.user.create({
+          data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
+          select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
+        });
+        const employee = await tx.employee.create({
+          data: { userId: createdUser.id, employeeNumber, organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId },
+          select: { id: true, employeeNumber: true, userId: true, organisationId: true },
+        });
+        return { user: createdUser, employee };
+      });
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') throw new BadRequestException('Username, email or employee number is already in use');
+      throw error;
+    }
   }
 
   async createEmployee(data: { employeeNumber: string; organisationId: string; departmentId?: string; designationId?: string; managerId?: string }, user: OrganisationUser) {
