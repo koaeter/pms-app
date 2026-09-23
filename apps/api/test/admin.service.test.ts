@@ -110,3 +110,39 @@ test('system administrators can read audit logs across organisations', async () 
   const where = await admin.listAudit({ permissions: ['audit.read'], roles: ['SYSTEM_ADMIN'], organisationId: null });
   assert.equal(where, undefined);
 });
+
+
+test('scoped administrators can revoke an assigned non-elevated role in their organisation', async () => {
+  const admin = new AdminService({
+    user: { findUnique: async () => ({ id: 'user-a', employee: { organisationId: 'org-a' } }) },
+    role: { findUnique: async () => ({ id: 'role-employee', name: 'EMPLOYEE' }) },
+    userRole: { deleteMany: async () => ({ count: 1 }) },
+  } as any, { record: async (action: string) => ({ action }) } as any);
+
+  const result = await admin.removeRole({
+    id: 'admin-a',
+    permissions: ['roles.manage'],
+    roles: ['HR_ADMIN'],
+    organisationId: 'org-a',
+  }, 'user-a', 'role-employee');
+
+  assert.deepEqual(result, { userId: 'user-a', roleId: 'role-employee', removed: true });
+});
+
+test('administrators cannot remove the system administrator role', async () => {
+  const admin = new AdminService({
+    user: { findUnique: async () => ({ id: 'root', employee: { organisationId: 'org-a' } }) },
+    role: { findUnique: async () => ({ id: 'role-system', name: 'SYSTEM_ADMIN' }) },
+    userRole: { deleteMany: async () => ({ count: 1 }) },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.removeRole({
+      id: 'admin-a',
+      permissions: ['roles.manage'],
+      roles: ['HR_ADMIN'],
+      organisationId: 'org-a',
+    }, 'root', 'role-system'),
+    (error: unknown) => error instanceof ForbiddenException,
+  );
+});
