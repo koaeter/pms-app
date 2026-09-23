@@ -61,6 +61,11 @@ test('the last active system administrator cannot be deactivated', async () => {
       count: async ({ where }: any) => where.userId === 'root' ? 1 : 1,
     },
     session: { deleteMany: async () => ({ count: 1 }) },
+    $transaction: async (fn: any) => fn({
+      user: { findUnique: async () => ({ id: 'root', isActive: true }), update: async () => ({ id: 'root', username: 'root', isActive: false }) },
+      role: { findUnique: async () => ({ id: 'role-system', name: 'SYSTEM_ADMIN' }) },
+      userRole: { count: async ({ where }: any) => where.userId === 'root' ? 1 : 1 },
+    }),
   } as any, { record: async () => undefined } as any);
 
   await assert.rejects(
