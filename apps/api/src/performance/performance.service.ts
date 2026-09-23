@@ -148,7 +148,7 @@ export class PerformanceService {
     const reviewType = await this.prisma.reviewType.findFirst({ where: { id: data.reviewTypeId, programmeId: cycle.programmeId } });
     if (!reviewType) throw new NotFoundException('Review type does not belong to this cycle programme');
     try {
-      return await this.prisma.performancePlan.create({ data });
+      return await this.prisma.performancePlan.create({ data: { ...data, supervisorId: employee.managerId } });
     } catch (error: any) {
       if (error?.code === 'P2002') throw new BadRequestException('A performance plan already exists for this employee, cycle, and review type');
       throw error;
@@ -398,7 +398,7 @@ export class PerformanceService {
 
   private async authorizeAssessor(plan: any, assessorId: string, roles: string[], assessorType: string) {
     if (assessorType === 'SELF' && plan.employeeId !== assessorId) throw new ForbiddenException('Self assessment can only be completed by the employee');
-    if (assessorType === 'SUPERVISOR' && plan.employee.managerId !== assessorId) throw new ForbiddenException('Supervisor assessment can only be completed by the employee manager');
+    if (assessorType === 'SUPERVISOR' && (plan.supervisorId ?? plan.employee.managerId) !== assessorId) throw new ForbiddenException('Supervisor assessment can only be completed by the employee manager');
 
     if (assessorType === 'REVIEWER') {
       if (!plan.reviewerId) throw new ForbiddenException('No reviewer has been assigned to this performance plan');
