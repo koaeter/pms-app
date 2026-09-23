@@ -41,6 +41,21 @@ export class AuthService {
     return { token, expiresAt, user: this.presentUser(user) };
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (newPassword.length < 10) throw new UnauthorizedException('New password must be at least 10 characters');
+    if (currentPassword === newPassword) throw new UnauthorizedException('New password must be different from the current password');
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true, isActive: true } });
+    if (!user || !user.isActive || !verifyPassword(currentPassword, user.passwordHash)) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: createPasswordHash(newPassword) },
+    });
+    await this.prisma.session.deleteMany({ where: { userId } });
+    return { success: true };
+  }
+
   async logout(token: string) {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     await this.prisma.session.deleteMany({ where: { tokenHash } });
