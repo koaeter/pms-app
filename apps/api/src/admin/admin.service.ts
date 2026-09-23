@@ -59,6 +59,20 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
+    if (!isActive && user.isActive) {
+      const systemAdminRole = await this.prisma.role.findUnique({ where: { name: 'SYSTEM_ADMIN' } });
+      if (systemAdminRole) {
+        const activeSystemAdmins = await this.prisma.userRole.count({
+          where: { roleId: systemAdminRole.id, user: { isActive: true } },
+        });
+        const targetIsSystemAdmin = await this.prisma.userRole.count({
+          where: { userId, roleId: systemAdminRole.id },
+        });
+        if (targetIsSystemAdmin > 0 && activeSystemAdmins <= 1) {
+          throw new BadRequestException('At least one active system administrator account must remain');
+        }
+      }
+    }
     const updated = await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
     if (!isActive) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
@@ -113,6 +127,12 @@ export class AdminService {
     }
     if (actor.roles?.includes('SYSTEM_ADMIN') === false && role.name === 'SYSTEM_ADMIN') {
       throw new ForbiddenException('Only a system administrator can remove the system administrator role');
+    }
+    if (role.name === 'SYSTEM_ADMIN') {
+      const systemAdminCount = await this.prisma.userRole.count({ where: { roleId } });
+      if (systemAdminCount <= 1) {
+        throw new BadRequestException('At least one system administrator role assignment must remain');
+      }
     }
     const result = await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
     if (result.count !== 1) throw new NotFoundException('Role assignment not found');
