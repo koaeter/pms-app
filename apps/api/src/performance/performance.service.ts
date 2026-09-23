@@ -140,6 +140,7 @@ export class PerformanceService {
     const employee = await this.prisma.employee.findUnique({ where: { id: data.employeeId } });
     if (!employee) throw new NotFoundException('Employee not found');
     if (!employee.userId) throw new BadRequestException('Employee must have a login account before a performance plan can be created');
+    if (employee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can have new performance plans created');
     const cycle = await this.prisma.performanceCycle.findUnique({ where: { id: data.cycleId } });
     if (!cycle) throw new NotFoundException('Performance cycle not found');
     if (cycle.status === 'CLOSED') throw new BadRequestException('Cannot create a plan for a closed cycle');
