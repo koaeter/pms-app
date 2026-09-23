@@ -133,13 +133,15 @@ export class AdminService {
     if (actor.roles?.includes('SYSTEM_ADMIN') === false && role.name === 'SYSTEM_ADMIN') {
       throw new ForbiddenException('Only a system administrator can remove the system administrator role');
     }
-    if (role.name === 'SYSTEM_ADMIN') {
-      const systemAdminCount = await this.prisma.userRole.count({ where: { roleId } });
-      if (systemAdminCount <= 1) {
-        throw new BadRequestException('At least one system administrator role assignment must remain');
-      }
-    }
-    const result = await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
+    const result = role.name === 'SYSTEM_ADMIN'
+      ? await this.prisma.$transaction(async (tx: any) => {
+          const systemAdminCount = await tx.userRole.count({ where: { roleId } });
+          if (systemAdminCount <= 1) {
+            throw new BadRequestException('At least one system administrator role assignment must remain');
+          }
+          return tx.userRole.deleteMany({ where: { userId, roleId } });
+        }, { isolationLevel: 'Serializable' })
+      : await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
     if (result.count !== 1) throw new NotFoundException('Role assignment not found');
     await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_ROLE_REMOVED', 'User', userId, actor.id, { role: role.name, roleId });
