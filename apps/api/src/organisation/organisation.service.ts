@@ -56,6 +56,16 @@ export class OrganisationService {
     if (data.parentId) {
       const parent = await this.prisma.department.findFirst({ where: { id: data.parentId, organisationId: department.organisationId } });
       if (!parent) throw new NotFoundException('Parent department not found in this organisation');
+      const visited = new Set<string>();
+      let currentId: string | null = data.parentId;
+      while (currentId) {
+        if (currentId === id) throw new BadRequestException('Department parent assignment would create a hierarchy cycle');
+        if (visited.has(currentId)) throw new BadRequestException('Department parent assignment contains a hierarchy cycle');
+        visited.add(currentId);
+        const current = await this.prisma.department.findUnique({ where: { id: currentId }, select: { id: true, parentId: true, organisationId: true } });
+        if (!current || current.organisationId !== department.organisationId) break;
+        currentId = current.parentId;
+      }
     }
     return this.prisma.department.update({ where: { id }, data: { ...(data.name !== undefined ? { name: data.name.trim() } : {}), ...(data.code !== undefined ? { code: data.code.trim().toUpperCase() } : {}), ...(data.parentId !== undefined ? { parentId: data.parentId } : {}) } });
   }
