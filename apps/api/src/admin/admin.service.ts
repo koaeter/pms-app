@@ -59,21 +59,26 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? null);
-    if (!isActive && user.isActive) {
-      const systemAdminRole = await this.prisma.role.findUnique({ where: { name: 'SYSTEM_ADMIN' } });
-      if (systemAdminRole) {
-        const activeSystemAdmins = await this.prisma.userRole.count({
-          where: { roleId: systemAdminRole.id, user: { isActive: true } },
-        });
-        const targetIsSystemAdmin = await this.prisma.userRole.count({
-          where: { userId, roleId: systemAdminRole.id },
-        });
-        if (targetIsSystemAdmin > 0 && activeSystemAdmins <= 1) {
-          throw new BadRequestException('At least one active system administrator account must remain');
-        }
-      }
-    }
-    const updated = await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
+    const updated = !isActive && user.isActive
+      ? await this.prisma.$transaction(async (tx: any) => {
+          const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
+          if (!target) throw new NotFoundException('User not found');
+          if (!target.isActive) return { id: target.id, username: user.username, isActive: false };
+          const systemAdminRole = await tx.role.findUnique({ where: { name: 'SYSTEM_ADMIN' } });
+          if (systemAdminRole) {
+            const activeSystemAdmins = await tx.userRole.count({
+              where: { roleId: systemAdminRole.id, user: { isActive: true } },
+            });
+            const targetIsSystemAdmin = await tx.userRole.count({
+              where: { userId, roleId: systemAdminRole.id },
+            });
+            if (targetIsSystemAdmin > 0 && activeSystemAdmins <= 1) {
+              throw new BadRequestException('At least one active system administrator account must remain');
+            }
+          }
+          return tx.user.update({ where: { id: userId }, data: { isActive: false }, select: { id: true, username: true, isActive: true } });
+        }, { isolationLevel: 'Serializable' })
+      : await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
     if (!isActive) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
     return updated;
