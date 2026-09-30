@@ -381,3 +381,14 @@ test('assessment save uses a serializable transaction', async () => {
   assert.equal(isolation, 'Serializable');
   assert.equal(result.assessment?.id, 'assessment-1');
 });
+
+
+test('performance service rejects creation through an inactive organisation', async () => {
+  const service = new PerformanceService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any, { assertCanAssess: async () => ({}), assertCanAssessWithClient: async () => ({}) } as any);
+  await assert.rejects(
+    () => service.createProgramme({ organisationId: 'org-a', name: 'Annual', code: 'ANNUAL' }),
+    /Organisation is inactive/i,
+  );
+});
