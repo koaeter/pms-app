@@ -150,6 +150,9 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
+    if (isActive && user.employee && user.employee.employmentStatus === 'EXITED') {
+      throw new BadRequestException('Exited employees cannot have an active login account');
+    }
     const updated = !isActive && user.isActive
       ? await this.prisma.$transaction(async (tx: any) => {
           const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
