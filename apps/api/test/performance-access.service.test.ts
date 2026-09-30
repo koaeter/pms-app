@@ -123,3 +123,19 @@ test('scoped administrators cannot access an inactive organisation', async () =>
     /organisation is inactive/i,
   );
 });
+
+test('employees and managers cannot read plans from an inactive organisation', async () => {
+  const inactive = new PerformanceAccessService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+    performancePlan: { findUnique: async () => plan },
+  } as any);
+  await assert.rejects(
+    () => inactive.requirePlanRead('plan-1', {
+      id: 'employee-user',
+      employeeId: 'employee-1',
+      organisationId: 'org-a',
+      roles: ['EMPLOYEE'],
+    }),
+    /organisation is inactive/i,
+  );
+});
