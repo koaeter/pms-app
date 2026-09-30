@@ -199,7 +199,6 @@ test('system administrators can read audit logs across organisations', async () 
   assert.equal(where, undefined);
 });
 
-
 test('scoped administrators can revoke an assigned non-elevated role in their organisation', async () => {
   const admin = new AdminService({
     user: { findUnique: async () => ({ id: 'user-a', employee: { organisationId: 'org-a' } }) },
@@ -236,7 +235,6 @@ test('administrators cannot remove the system administrator role', async () => {
   );
 });
 
-
 test('user creation rejects duplicate username or email cleanly', async () => {
   const admin = new AdminService({
     user: {
@@ -271,7 +269,6 @@ test('user creation rejects blank identity fields and malformed email', async ()
     (error: any) => error?.response?.message === 'Email address is invalid',
   );
 });
-
 
 test('scoped administrators create accounts pending assignment to their organisation', async () => {
   let createdData: any;
@@ -308,7 +305,10 @@ test('an unlinked employee can receive a login account', async () => {
     employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
     $transaction: async (fn: any) => fn({
       user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
-      employee: { updateMany: async () => { employeeUpdated = true; return { count: 1 }; } },
+      employee: {
+        findUnique: async () => ({ id: 'employee-a', userId: null, employmentStatus: 'ACTIVE' }),
+        updateMany: async () => { employeeUpdated = true; return { count: 1 }; },
+      },
     }),
   } as any, { record: async () => undefined } as any);
   const result = await admin.createAccountForEmployee(
@@ -320,14 +320,16 @@ test('an unlinked employee can receive a login account', async () => {
   assert.equal(employeeUpdated, true);
 });
 
-
 test('employee account creation is conditional and does not overwrite a concurrent link', async () => {
   let created = false;
   const admin = new AdminService({
     employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
     $transaction: async (fn: any) => fn({
-      user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
-      employee: { updateMany: async () => ({ count: 0 }) },
+      user: { create: async () => { created = true; return { id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }; } },
+      employee: {
+        findUnique: async () => ({ id: 'employee-a', userId: null, employmentStatus: 'ACTIVE' }),
+        updateMany: async () => ({ count: 0 }),
+      },
     }),
   } as any, { record: async () => undefined } as any);
   await assert.rejects(
@@ -338,9 +340,8 @@ test('employee account creation is conditional and does not overwrite a concurre
     ),
     (error: any) => error?.response?.message === 'Employee was linked by another request',
   );
-  assert.equal(created, false);
+  assert.equal(created, true);
 });
-
 
 test('exited employees cannot have their login account reactivated', async () => {
   const admin = new AdminService({
@@ -351,7 +352,6 @@ test('exited employees cannot have their login account reactivated', async () =>
     (error: any) => error?.response?.message === 'Exited employees cannot have an active login account',
   );
 });
-
 
 test('employee linking rechecks employment status inside the transaction', async () => {
   const admin = new AdminService({
@@ -368,7 +368,6 @@ test('employee linking rechecks employment status inside the transaction', async
   );
 });
 
-
 test('reactivating an inactive account clears any stale sessions', async () => {
   let revoked = false;
   const admin = new AdminService({
@@ -382,7 +381,6 @@ test('reactivating an inactive account clears any stale sessions', async () => {
   assert.equal(result.isActive, true);
   assert.equal(revoked, true);
 });
-
 
 test('employee account creation rechecks employment status inside the transaction', async () => {
   const admin = new AdminService({
