@@ -7,7 +7,7 @@ function service(organisationId = 'org-a') {
   return new ReportsService({
     organisation: {
       findUnique: async ({ where }: any) =>
-        where.id === organisationId || where.id === 'org-b' ? { id: where.id, name: 'Org', code: where.id.toUpperCase() } : null,
+        where.id === organisationId || where.id === 'org-b' ? { id: where.id, name: 'Org', code: where.id.toUpperCase(), isActive: true } : null,
     },
     performanceCycle: { findMany: async () => [] },
     performancePlan: { findMany: async () => [] },
@@ -85,5 +85,16 @@ test('employee history rejects an employee from another organisation', async () 
       organisationId: 'org-a',
     }),
     (error: unknown) => error instanceof ForbiddenException,
+  );
+});
+
+
+test('reports reject inactive organisation access for scoped administrators', async () => {
+  const inactive = new ReportsService({
+    organisation: { findUnique: async () => ({ id: 'org-a', name: 'Org', code: 'ORG-A', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => inactive.performanceSummary('org-a', { id: 'admin-a', roles: ['PERFORMANCE_ADMIN'], permissions: ['reports.read'], organisationId: 'org-a' }),
+    /organisation is inactive/i,
   );
 });
