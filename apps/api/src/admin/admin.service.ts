@@ -127,11 +127,15 @@ export class AdminService {
 
     try {
       const created = await this.prisma.$transaction(async (tx: any) => {
+        const currentEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, userId: true, employmentStatus: true } });
+        if (!currentEmployee) throw new NotFoundException('Employee not found');
+        if (currentEmployee.userId) throw new BadRequestException('Employee already has a user account');
+        if (currentEmployee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can receive a login account');
         const createdUser = await tx.user.create({
           data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
           select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
         });
-        const linked = await tx.employee.updateMany({ where: { id: employeeId, userId: null }, data: { userId: createdUser.id } });
+        const linked = await tx.employee.updateMany({ where: { id: employeeId, userId: null, employmentStatus: 'ACTIVE' }, data: { userId: createdUser.id } });
         if (linked.count !== 1) throw new BadRequestException('Employee was linked by another request');
         return createdUser;
       });
