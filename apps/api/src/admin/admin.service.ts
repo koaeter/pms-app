@@ -85,9 +85,10 @@ export class AdminService {
     if (employee.userId && employee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
 
     const linked = await this.prisma.$transaction(async (tx: any) => {
-      const freshEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, employeeNumber: true, userId: true, organisationId: true } });
+      const freshEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, employeeNumber: true, userId: true, organisationId: true, employmentStatus: true } });
       const freshUser = await tx.user.findUnique({ where: { id: userId }, select: { id: true, employee: { select: { id: true } }, provisioningOrganisationId: true } });
       if (!freshEmployee || !freshUser) throw new NotFoundException('User or employee not found');
+      if (freshEmployee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be linked to a login account');
       if (freshEmployee.userId && freshEmployee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
       if (freshUser.employee && freshUser.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
 
