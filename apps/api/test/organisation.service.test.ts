@@ -5,7 +5,7 @@ import { OrganisationService } from '../src/organisation/organisation.service';
 
 function basePrisma(existingOrganisationId: string | null) {
   return {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     user: { findUnique: async () => ({ id: 'user-a' }) },
     department: { findFirst: async () => null },
     designation: { findFirst: async () => null },
@@ -44,7 +44,7 @@ test('system administrator can move an existing employee between organisations',
 
 test('employee manager assignment cannot create a reporting cycle', async () => {
   const prisma = {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     user: { findUnique: async () => ({ id: 'user-a' }) },
     department: { findFirst: async () => null },
     designation: { findFirst: async () => null },
@@ -71,7 +71,7 @@ test('employee manager assignment cannot create a reporting cycle', async () => 
 
 test('department parent assignment cannot create a hierarchy cycle', async () => {
   const prisma = {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     department: {
       findUnique: async ({ where }: any) => {
         if (where.id === 'dept-a') return { id: 'dept-a', parentId: 'dept-b', organisationId: 'org-a' };
