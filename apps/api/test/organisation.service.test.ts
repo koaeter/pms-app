@@ -14,6 +14,7 @@ function basePrisma(existingOrganisationId: string | null) {
         ? { id: where.userId ? 'employee-a' : where.id, organisationId: existingOrganisationId, managerId: null }
         : null,
       upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
+      performancePlan: { count: async () => 0 },
     },
   };
 }
