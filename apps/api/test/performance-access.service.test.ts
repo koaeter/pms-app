@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PerformanceAccessService } from '../src/performance/performance-access.service';
 
-const organisation = { id: 'org-a' };
+const organisation = { id: 'org-a', isActive: true };
 const plan = {
   id: 'plan-1',
   employee: {
@@ -111,4 +111,15 @@ test('visible-plan filtering limits ordinary users to themselves and direct repo
     roles: ['SUPERVISOR'],
   });
   assert.deepEqual(result, [plans[0], plans[1]]);
+});
+
+
+test('scoped administrators cannot access an inactive organisation', async () => {
+  const inactive = new PerformanceAccessService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => inactive.requireOrganisationAccess('org-a', { id: 'admin-user', organisationId: 'org-a', roles: ['PERFORMANCE_ADMIN'] }),
+    /organisation is inactive/i,
+  );
 });
