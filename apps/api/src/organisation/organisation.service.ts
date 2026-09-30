@@ -166,8 +166,25 @@ export class OrganisationService {
     if (!employee.organisationId) throw new BadRequestException('Employee has no organisation');
     await this.requireOrganisationAccess(employee.organisationId, user);
     if (employee.employmentStatus === status) return employee;
-    const updated = await this.prisma.employee.update({ where: { id: employeeId }, data: { employmentStatus: status }, include: { user: { select: { id: true, username: true, isActive: true } } } });
-    await this.audit?.record('EMPLOYEE_STATUS_CHANGED', 'Employee', employeeId, user.id, { from: employee.employmentStatus, to: status });
+    const updated = await this.prisma.$transaction(async (tx: any) => {
+      const current = await tx.employee.findUnique({ where: { id: employeeId }, include: { user: true } });
+      if (!current) throw new NotFoundException('Employee not found');
+      if (current.employmentStatus === status) return current;
+      const result = await tx.employee.updateMany({
+        where: { id: employeeId, employmentStatus: current.employmentStatus },
+        data: { employmentStatus: status },
+      });
+      if (result.count !== 1) throw new BadRequestException('Employee status changed before this update could be completed');
+      if (status === 'EXITED' && current.userId) {
+        await tx.user.updateMany({ where: { id: current.userId }, data: { isActive: false } });
+        await tx.session.deleteMany({ where: { userId: current.userId } });
+      }
+      return tx.employee.findUnique({
+        where: { id: employeeId },
+        include: { user: { select: { id: true, username: true, isActive: true } } },
+      });
+    }, { isolationLevel: 'Serializable' });
+    await this.audit?.record('EMPLOYEE_STATUS_CHANGED', 'Employee', employeeId, user.id, { from: employee.employmentStatus, to: status, loginDisabled: status === 'EXITED' && Boolean(employee.userId) });
     return updated;
   }
 
