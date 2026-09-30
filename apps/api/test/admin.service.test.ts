@@ -305,7 +305,7 @@ test('system administrators may create unassigned platform accounts', async () =
 test('an unlinked employee can receive a login account', async () => {
   let employeeUpdated = false;
   const admin = new AdminService({
-    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', user: null }) },
+    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
     $transaction: async (fn: any) => fn({
       user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
       employee: { updateMany: async () => { employeeUpdated = true; return { count: 1 }; } },
