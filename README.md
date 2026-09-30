@@ -36,6 +36,7 @@ Configurable electronic Performance Management System for public-sector organisa
 - Employee performance plans containing weighted KPI/competency items and targets.
 - Self, supervisor, reviewer and final assessment workflow.
 - Assessment stage ownership and workflow guards.
+- Immutable assessment revision history for save, submit and approval events.
 - In-app workflow notifications with unread/read tracking.
 - Performance administration UI at `/admin/performance`.
 - Organisation administration UI at `/admin/organisation`.
