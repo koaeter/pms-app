@@ -177,3 +177,18 @@ test('returning an exited employee to active does not automatically reactivate t
   const result = await service.updateEmployeeStatus('employee-a', 'ACTIVE', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] });
   assert.equal(result?.employmentStatus, 'ACTIVE');
 });
+
+
+test('organisation lifecycle changes are audited', async () => {
+  const events: any[] = [];
+  const service = new OrganisationService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      organisation: { update: async () => ({ id: 'org-a', isActive: false }) },
+      user: { findMany: async () => [] },
+      session: { deleteMany: async () => ({ count: 0 }) },
+    }),
+  } as any, { record: async (...args: any[]) => events.push(args) } as any);
+  await service.updateOrganisation('org-a', { isActive: false }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] });
+  assert.deepEqual(events, [['ORGANISATION_UPDATED', 'Organisation', 'org-a', 'root', { isActive: false, deactivated: true, reactivated: false }]]);
+});
