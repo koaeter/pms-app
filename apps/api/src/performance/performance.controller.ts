@@ -126,6 +126,12 @@ export class PerformanceController {
     return result;
   }
 
+  @Get('plans/:planId/assessment-history') @RequirePermissions('performance.read')
+  async assessmentHistory(@Param('planId') planId: string, @Req() request: { user: any }) {
+    await this.access.requirePlanRead(planId, request.user);
+    return this.service.assessmentHistory(planId);
+  }
+
   @Post('plans/:planId/assessments') @RequirePermissions('performance.assess')
   async saveAssessment(@Param('planId') planId: string, @Req() request: { user: any }, @Body() body: { assessorType: 'SELF' | 'SUPERVISOR' | 'REVIEWER' | 'FINAL'; comment?: string; items: Array<{ planItemId: string; ratingLevelId: string; comment?: string }> }) {
     await this.access.requirePlanOrganisationAccess(planId, request.user);
