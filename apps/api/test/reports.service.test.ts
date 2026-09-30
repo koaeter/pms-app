@@ -54,7 +54,7 @@ test('reports allow a scoped administrator to access its own organisation summar
 test('employee history scopes plans to the employee organisation', async () => {
   let capturedWhere: any;
   const scoped = new ReportsService({
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employeeNumber: 'E001', user: { firstName: 'A', lastName: 'User', username: 'a' }, department: null, designation: null }) },
     performancePlan: { findMany: async ({ where }: any) => { capturedWhere = where; return []; } },
   } as any);
@@ -64,7 +64,7 @@ test('employee history scopes plans to the employee organisation', async () => {
 
 test('employee history rejects an employee from another organisation', async () => {
   const crossOrg = new ReportsService({
-    organisation: { findUnique: async () => ({ id: 'org-b' }) },
+    organisation: { findUnique: async () => ({ id: 'org-b', isActive: true }) },
     employee: {
       findUnique: async () => ({
         id: 'employee-b',
