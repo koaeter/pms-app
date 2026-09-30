@@ -387,7 +387,7 @@ export class PerformanceService {
 
       const approved = await tx.performanceAssessment.findUnique({ where: { id: finalAssessment.id }, include: { items: true } });
       if (!approved) throw new NotFoundException('Final assessment not found after approval');
-      await this.recordAssessmentRevision(tx, approved, 'APPROVED', currentUser.id);
+      await this.recordAssessmentRevision(tx, approved, 'APPROVED', finalAssessment.assessorId);
       return approved;
     });
     return { assessment: updated, planStatus: 'APPROVED', finalScore: Number(finalAssessment.overallScore ?? 0) };
