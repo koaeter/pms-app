@@ -105,3 +105,30 @@ test('organisation creation rejects blank name or code', async () => {
     (error: any) => error?.response?.message === 'Organisation code is required',
   );
 });
+
+
+test('deactivating an organisation revokes tenant user sessions but preserves system administrator sessions', async () => {
+  const deleted: string[][] = [];
+  const service = new OrganisationService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      organisation: { update: async ({ data }: any) => ({ id: 'org-a', isActive: data.isActive }) },
+      user: { findMany: async () => [
+        { id: 'user-a', roles: [{ role: { name: 'HR_ADMIN' } }] },
+        { id: 'root', roles: [{ role: { name: 'SYSTEM_ADMIN' } }] },
+      ] },
+      session: { deleteMany: async ({ where }: any) => { deleted.push(where.userId.in); return { count: 1 }; } },
+    }),
+  } as any);
+  const result = await service.updateOrganisation('org-a', { isActive: false }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] });
+  assert.equal(result.isActive, false);
+  assert.deepEqual(deleted, [['user-a']]);
+});
+
+test('scoped administrators cannot operate through an inactive organisation', async () => {
+  const service = new OrganisationService({ organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) } } as any);
+  await assert.rejects(
+    () => service.listDepartments('org-a', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] }),
+    (error: any) => error?.response?.message === 'This organisation is inactive',
+  );
+});
