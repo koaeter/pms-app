@@ -392,3 +392,5 @@ test('performance service rejects creation through an inactive organisation', as
     /Organisation is inactive/i,
   );
 });
+
+// Lifecycle guard coverage retained on the account/organisation consistency pass.
