@@ -53,6 +53,11 @@ export class OrganisationService {
       }
       return result;
     }, { isolationLevel: 'Serializable' });
+    await this.audit?.record('ORGANISATION_UPDATED', 'Organisation', id, user.id, {
+      isActive: updated.isActive,
+      deactivated: currentOrganisation.isActive && data.isActive === false,
+      reactivated: !currentOrganisation.isActive && data.isActive === true,
+    });
     return updated;
   }
 
