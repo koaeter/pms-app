@@ -171,7 +171,6 @@ test('returning an exited employee to active does not automatically reactivate t
       },
       user: { updateMany: async () => ({ count: 0 }) },
       session: { deleteMany: async () => ({ count: 0 }) },
-      employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a', user: { id: 'user-a', isActive: false } }) },
     }),
   } as any, { record: async () => undefined } as any);
   const result = await service.updateEmployeeStatus('employee-a', 'ACTIVE', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] });
