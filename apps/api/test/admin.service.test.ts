@@ -351,3 +351,19 @@ test('exited employees cannot have their login account reactivated', async () =>
     (error: any) => error?.response?.message === 'Exited employees cannot have an active login account',
   );
 });
+
+
+test('employee linking rechecks employment status inside the transaction', async () => {
+  const admin = new AdminService({
+    user: { findUnique: async () => ({ id: 'user-a', employee: null, provisioningOrganisationId: 'org-a' }) },
+    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE' }) },
+    $transaction: async (fn: any) => fn({
+      employee: { findUnique: async () => ({ id: 'employee-a', employeeNumber: 'E001', userId: null, organisationId: 'org-a', employmentStatus: 'EXITED' }) },
+      user: { findUnique: async () => ({ id: 'user-a', employee: null, provisioningOrganisationId: 'org-a' }) },
+    }),
+  } as any, { record: async () => undefined } as any);
+  await assert.rejects(
+    () => admin.linkUserToEmployee({ id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' }, 'user-a', 'employee-a'),
+    (error: any) => error?.response?.message === 'Only active employees can be linked to a login account',
+  );
+});
