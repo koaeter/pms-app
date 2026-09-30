@@ -132,3 +132,48 @@ test('scoped administrators cannot operate through an inactive organisation', as
     (error: any) => error?.response?.message === 'This organisation is inactive',
   );
 });
+
+
+test('exiting an employee disables the linked login and revokes sessions', async () => {
+  const updates: any[] = [];
+  const revoked: string[] = [];
+  const service = new OrganisationService({
+    employee: {
+      findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a', user: { id: 'user-a', isActive: true } }),
+    },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      employee: {
+        findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a', user: { id: 'user-a', isActive: true } }),
+        updateMany: async ({ data }: any) => { updates.push(data); return { count: 1 }; },
+      },
+      user: { updateMany: async ({ where, data }: any) => { updates.push({ where, data }); return { count: 1 }; } },
+      session: { deleteMany: async ({ where }: any) => { revoked.push(where.userId); return { count: 1 }; } },
+    }),
+  } as any, { record: async () => undefined } as any);
+  const result = await service.updateEmployeeStatus('employee-a', 'EXITED', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] });
+  assert.equal(result?.user?.isActive, true);
+  assert.deepEqual(updates, [
+    { employmentStatus: 'EXITED' },
+    { where: { id: 'user-a' }, data: { isActive: false } },
+  ]);
+  assert.deepEqual(revoked, ['user-a']);
+});
+
+test('returning an exited employee to active does not automatically reactivate the login account', async () => {
+  const service = new OrganisationService({
+    employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'EXITED', userId: 'user-a', user: { id: 'user-a', isActive: false } }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      employee: {
+        findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'EXITED', userId: 'user-a', user: { id: 'user-a', isActive: false } }),
+        updateMany: async () => ({ count: 1 }),
+      },
+      user: { updateMany: async () => ({ count: 0 }) },
+      session: { deleteMany: async () => ({ count: 0 }) },
+      employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a', user: { id: 'user-a', isActive: false } }) },
+    }),
+  } as any, { record: async () => undefined } as any);
+  const result = await service.updateEmployeeStatus('employee-a', 'ACTIVE', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] });
+  assert.equal(result?.employmentStatus, 'ACTIVE');
+});
