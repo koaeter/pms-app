@@ -84,6 +84,7 @@ model Employee {
   reviewerPlans PerformancePlan[] @relation("PerformancePlanReviewer")
   finalAssessorPlans PerformancePlan[] @relation("PerformancePlanFinalAssessor")
   assessmentsGiven PerformanceAssessment[] @relation("Assessor")
+  assessmentRevisionsGiven PerformanceAssessmentRevision[] @relation("AssessmentRevisionActor")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([organisationId])
@@ -288,7 +289,6 @@ model PerformancePlan {
   finalAssessor Employee? @relation("PerformancePlanFinalAssessor", fields: [finalAssessorId], references: [id], onDelete: SetNull)
   items PerformancePlanItem[]
   assessments PerformanceAssessment[]
-  assessmentRevisions PerformanceAssessmentRevision[] @relation("AssessmentRevisionActor")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([employeeId, cycleId, reviewTypeId])
