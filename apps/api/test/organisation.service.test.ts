@@ -161,13 +161,14 @@ test('exiting an employee disables the linked login and revokes sessions', async
 });
 
 test('returning an exited employee to active does not automatically reactivate the login account', async () => {
+  let status = 'EXITED';
   const service = new OrganisationService({
     employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'EXITED', userId: 'user-a', user: { id: 'user-a', isActive: false } }) },
     organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     $transaction: async (fn: any) => fn({
       employee: {
-        findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'EXITED', userId: 'user-a', user: { id: 'user-a', isActive: false } }),
-        updateMany: async () => ({ count: 1 }),
+        findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: status, userId: 'user-a', user: { id: 'user-a', isActive: false } }),
+        updateMany: async () => { status = 'ACTIVE'; return { count: 1 }; },
       },
       user: { updateMany: async () => ({ count: 0 }) },
       session: { deleteMany: async () => ({ count: 0 }) },
