@@ -81,6 +81,7 @@ export class AdminService {
     this.requireTargetOrganisation(actor, employee.organisationId ?? null);
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     if (user.employee && user.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
+    if (employee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be linked to a login account');
     if (employee.userId && employee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
 
     const linked = await this.prisma.$transaction(async (tx: any) => {
