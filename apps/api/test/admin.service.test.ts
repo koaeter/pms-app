@@ -382,3 +382,18 @@ test('reactivating an inactive account clears any stale sessions', async () => {
   assert.equal(result.isActive, true);
   assert.equal(revoked, true);
 });
+
+
+test('employee account creation rechecks employment status inside the transaction', async () => {
+  const admin = new AdminService({
+    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
+    $transaction: async (fn: any) => fn({
+      employee: { findUnique: async () => ({ id: 'employee-a', userId: null, employmentStatus: 'EXITED' }) },
+      user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
+    }),
+  } as any, { record: async () => undefined } as any);
+  await assert.rejects(
+    () => admin.createAccountForEmployee({ id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' }, 'employee-a', { username: 'new-login', password: 'CorrectPassword123', lastName: 'Login' }),
+    (error: any) => error?.response?.message === 'Only active employees can receive a login account',
+  );
+});
