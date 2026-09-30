@@ -367,3 +367,18 @@ test('employee linking rechecks employment status inside the transaction', async
     (error: any) => error?.response?.message === 'Only active employees can be linked to a login account',
   );
 });
+
+
+test('reactivating an inactive account clears any stale sessions', async () => {
+  let revoked = false;
+  const admin = new AdminService({
+    user: {
+      findUnique: async () => ({ id: 'user-a', isActive: false, employee: { organisationId: 'org-a', employmentStatus: 'ON_LEAVE' } }),
+      update: async ({ where, data }: any) => ({ id: where.id, username: 'user-a', isActive: data.isActive }),
+    },
+    session: { deleteMany: async ({ where }: any) => { revoked = where.userId === 'user-a'; return { count: 1 }; } },
+  } as any, { record: async () => undefined } as any);
+  const result = await admin.setUserStatus({ id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' }, 'user-a', true);
+  assert.equal(result.isActive, true);
+  assert.equal(revoked, true);
+});
