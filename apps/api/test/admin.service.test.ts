@@ -340,3 +340,14 @@ test('employee account creation is conditional and does not overwrite a concurre
   );
   assert.equal(created, false);
 });
+
+
+test('exited employees cannot have their login account reactivated', async () => {
+  const admin = new AdminService({
+    user: { findUnique: async () => ({ id: 'user-a', isActive: false, employee: { organisationId: 'org-a', employmentStatus: 'EXITED' } }) },
+  } as any, { record: async () => undefined } as any);
+  await assert.rejects(
+    () => admin.setUserStatus({ id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' }, 'user-a', true),
+    (error: any) => error?.response?.message === 'Exited employees cannot have an active login account',
+  );
+});
