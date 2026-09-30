@@ -174,7 +174,7 @@ export class AdminService {
           return tx.user.update({ where: { id: userId }, data: { isActive: false }, select: { id: true, username: true, isActive: true } });
         }, { isolationLevel: 'Serializable' })
       : await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
-    if (!isActive) await this.prisma.session.deleteMany({ where: { userId } });
+    if (!isActive || (isActive && !user.isActive)) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
     return updated;
   }
