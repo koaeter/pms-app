@@ -112,6 +112,7 @@ export class AdminService {
     if (!employee) throw new NotFoundException('Employee not found');
     this.requireTargetOrganisation(actor, employee.organisationId ?? null);
     if (employee.userId) throw new BadRequestException('Employee already has a user account');
+    if (employee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can receive a login account');
 
     const username = data.username.trim();
     const firstName = data.firstName?.trim() || employee.user?.firstName || 'Employee';
