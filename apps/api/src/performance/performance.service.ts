@@ -295,11 +295,14 @@ export class PerformanceService {
         if (result.count !== 1) throw new BadRequestException('The assessment changed before it could be saved');
         await tx.performanceAssessmentItem.deleteMany({ where: { assessmentId: existing.id } });
         await tx.performanceAssessmentItem.createMany({ data: scoredItems.map((item) => ({ ...item, assessmentId: existing.id })) });
-        return tx.performanceAssessment.findUnique({ where: { id: existing.id }, include: { items: true } });
+        const updated = await tx.performanceAssessment.findUnique({ where: { id: existing.id }, include: { items: true } });
+        if (!updated) throw new NotFoundException('Assessment not found after save');
+        await this.recordAssessmentRevision(tx, updated, 'SAVED', assessor.id);
+        return updated;
       }
 
       try {
-        return await tx.performanceAssessment.create({
+        const created = await tx.performanceAssessment.create({
           data: {
             planId,
             assessorId: assessor.id,
@@ -310,6 +313,8 @@ export class PerformanceService {
           },
           include: { items: true },
         });
+        await this.recordAssessmentRevision(tx, created, 'SAVED', assessor.id);
+        return created;
       } catch (error: any) {
         if (error?.code === 'P2002') throw new BadRequestException('An assessment draft already exists for this stage');
         throw error;
@@ -350,7 +355,10 @@ export class PerformanceService {
         throw new BadRequestException('The performance plan changed before assessment submission could be completed');
       }
 
-      return tx.performanceAssessment.findUnique({ where: { id: assessment.id } });
+      const submitted = await tx.performanceAssessment.findUnique({ where: { id: assessment.id }, include: { items: true } });
+      if (!submitted) throw new NotFoundException('Assessment not found after submission');
+      await this.recordAssessmentRevision(tx, submitted, 'SUBMITTED', assessor.id);
+      return submitted;
     });
     return { assessment: updated, workflow: this.workflowFor(plan, assessorType, 'SUBMITTED') };
   }
@@ -377,7 +385,10 @@ export class PerformanceService {
         throw new BadRequestException('The performance plan changed before approval could be completed');
       }
 
-      return tx.performanceAssessment.findUnique({ where: { id: finalAssessment.id } });
+      const approved = await tx.performanceAssessment.findUnique({ where: { id: finalAssessment.id }, include: { items: true } });
+      if (!approved) throw new NotFoundException('Final assessment not found after approval');
+      await this.recordAssessmentRevision(tx, approved, 'APPROVED', currentUser.id);
+      return approved;
     });
     return { assessment: updated, planStatus: 'APPROVED', finalScore: Number(finalAssessment.overallScore ?? 0) };
   }
@@ -394,6 +405,55 @@ export class PerformanceService {
     const lockedPlan = await this.prisma.performancePlan.findUnique({ where: { id: planId } });
     if (!lockedPlan) throw new NotFoundException('Performance plan not found');
     return lockedPlan;
+  }
+
+  async assessmentHistory(planId: string) {
+    const plan = await this.prisma.performancePlan.findUnique({ where: { id: planId }, select: { id: true } });
+    if (!plan) throw new NotFoundException('Performance plan not found');
+
+    return this.prisma.performanceAssessmentRevision.findMany({
+      where: { assessment: { planId } },
+      include: {
+        assessor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
+        assessment: { select: { id: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async recordAssessmentRevision(
+    tx: any,
+    assessment: { id: string; planId: string; assessorId: string; assessorType: string; status: string; overallScore: any; comment: string | null; items?: Array<any> },
+    action: string,
+    actorId: string,
+  ) {
+    await tx.performanceAssessmentRevision.create({
+      data: {
+        assessmentId: assessment.id,
+        assessorId: actorId,
+        assessorType: assessment.assessorType,
+        action,
+        status: assessment.status,
+        overallScore: assessment.overallScore,
+        comment: assessment.comment,
+        snapshot: {
+          assessmentId: assessment.id,
+          planId: assessment.planId,
+          assessorId: assessment.assessorId,
+          assessorType: assessment.assessorType,
+          status: assessment.status,
+          overallScore: assessment.overallScore == null ? null : Number(assessment.overallScore),
+          comment: assessment.comment,
+          items: (assessment.items ?? []).map((item) => ({
+            planItemId: item.planItemId,
+            ratingScaleId: item.ratingScaleId,
+            ratingLevelId: item.ratingLevelId,
+            score: item.score == null ? null : Number(item.score),
+            comment: item.comment,
+          })),
+        },
+      },
+    });
   }
 
   private async authorizeAssessor(plan: any, assessorId: string, roles: string[], assessorType: string) {
