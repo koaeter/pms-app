@@ -241,6 +241,14 @@ export class OrganisationService {
     if (existing && existing.organisationId !== data.organisationId && !user.roles.includes('SYSTEM_ADMIN')) {
       throw new ForbiddenException('Only a system administrator can move an employee between organisations');
     }
+    if (existing && existing.organisationId !== data.organisationId) {
+      const activePlans = await this.prisma.performancePlan.count({
+        where: { employeeId: existing.id, status: { notIn: ['APPROVED', 'LOCKED'] } },
+      });
+      if (activePlans > 0) {
+        throw new BadRequestException('Employee cannot be transferred while they have an active performance plan; complete or lock the plan first');
+      }
+    }
     if (existing && data.managerId === existing.id) throw new BadRequestException('An employee cannot be their own manager');
     if (data.managerId) {
       const visited = new Set<string>();
