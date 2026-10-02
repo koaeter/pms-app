@@ -28,7 +28,7 @@ export class OrganisationService {
   }
 
   async updateOrganisation(id: string, data: { name?: string; code?: string; description?: string; isActive?: boolean }, user: OrganisationUser) {
-    const currentOrganisation = await this.requireOrganisationAccess(id, user);
+    await this.requireOrganisationAccess(id, user);
     const name = data.name?.trim();
     const code = data.code?.trim().toUpperCase();
     if (data.name !== undefined && !name) throw new BadRequestException('Organisation name is required');
