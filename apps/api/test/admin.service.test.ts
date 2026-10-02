@@ -273,6 +273,21 @@ test('user creation rejects blank identity fields and malformed email', async ()
 });
 
 
+test('system administrators cannot create provisioned accounts in inactive organisations', async () => {
+  const admin = new AdminService({
+    organisation: { findUnique: async () => ({ isActive: false }) },
+    user: { create: async () => ({}) },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.createUser(
+      { id: 'root', permissions: ['users.manage'], roles: ['SYSTEM_ADMIN'], organisationId: null },
+      { username: 'inactive-org-user', password: 'valid-password', firstName: 'Inactive', lastName: 'Org', provisioningOrganisationId: 'org-a' },
+    ),
+    (error: any) => error?.response?.message === 'Cannot provision a login account in an inactive organisation',
+  );
+});
+
 test('scoped administrators create accounts pending assignment to their organisation', async () => {
   let createdData: any;
   const admin = new AdminService({
@@ -300,6 +315,22 @@ test('system administrators may create unassigned platform accounts', async () =
     { username: 'platform', password: 'valid-password', firstName: 'Platform', lastName: 'Account' },
   );
   assert.equal(createdData.provisioningOrganisationId, null);
+});
+
+test('account creation for an employee in an inactive organisation is rejected', async () => {
+  const admin = new AdminService({
+    employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
+    organisation: { findUnique: async () => ({ isActive: false }) },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.createAccountForEmployee(
+      { id: 'root', permissions: ['users.manage'], roles: ['SYSTEM_ADMIN'], organisationId: null },
+      'employee-a',
+      { username: 'inactive-login', password: 'valid-password', firstName: 'Inactive', lastName: 'Org' },
+    ),
+    (error: any) => error?.response?.message === 'Cannot provision a login account in an inactive organisation',
+  );
 });
 
 test('an unlinked employee can receive a login account', async () => {
