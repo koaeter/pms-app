@@ -5,7 +5,7 @@ import { OrganisationService } from '../src/organisation/organisation.service';
 
 function basePrisma(existingOrganisationId: string | null) {
   return {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     user: { findUnique: async () => ({ id: 'user-a' }) },
     department: { findFirst: async () => null },
     designation: { findFirst: async () => null },
@@ -14,8 +14,8 @@ function basePrisma(existingOrganisationId: string | null) {
         ? { id: where.userId ? 'employee-a' : where.id, organisationId: existingOrganisationId, managerId: null }
         : null,
       upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
-      performancePlan: { count: async () => 0 },
     },
+    performancePlan: { count: async () => 0 },
   };
 }
 
