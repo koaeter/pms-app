@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { EmployeeLifecyclePolicy } from '../lifecycle/employee-lifecycle.policy';
 
 export type AssignmentUser = {
   id: string;
@@ -85,6 +86,7 @@ export class PerformanceAssignmentService {
 
     for (const candidate of candidates) {
       if (!candidate.user) throw new BadRequestException('Assigned assessors must have user accounts');
+      if (!EmployeeLifecyclePolicy.canBeAssignedAsAssessor(candidate.employmentStatus)) throw new BadRequestException('Assigned assessors must be active employees');
       if (!candidate.organisationId || candidate.organisationId !== plan.employee.organisationId) {
         throw new BadRequestException('Assigned assessors must belong to the same organisation as the performance plan');
       }
