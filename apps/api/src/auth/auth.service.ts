@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
+import { EmployeeLifecyclePolicy } from '../lifecycle/employee-lifecycle.policy';
 
 const SESSION_HOURS = 8;
 
@@ -33,7 +34,7 @@ export class AuthService {
     });
     const roles = user?.roles.map((entry: any) => entry.role.name) ?? [];
     const organisation = user?.employee?.organisation ?? user?.provisioningOrganisation ?? null;
-    if (!user || !user.isActive || !verifyPassword(password, user.passwordHash) || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) throw new UnauthorizedException('Invalid username or password');
+    if (!user || !user.isActive || (user.employee && !EmployeeLifecyclePolicy.isLoginEligible(user.employee.employmentStatus)) || !verifyPassword(password, user.passwordHash) || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) throw new UnauthorizedException('Invalid username or password');
 
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -73,7 +74,7 @@ export class AuthService {
     });
     const roles = session?.user.roles.map((entry: any) => entry.role.name) ?? [];
     const organisation = session?.user.employee?.organisation ?? session?.user.provisioningOrganisation ?? null;
-    if (!session || session.expiresAt <= new Date() || !session.user.isActive || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) {
+    if (!session || session.expiresAt <= new Date() || !session.user.isActive || (session.user.employee && !EmployeeLifecyclePolicy.isLoginEligible(session.user.employee.employmentStatus)) || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) {
       if (session?.user.id && organisation && !organisation.isActive) await this.prisma.session.deleteMany({ where: { userId: session.user.id } });
       throw new UnauthorizedException('Session expired or invalid');
     }
