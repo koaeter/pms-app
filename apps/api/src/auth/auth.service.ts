@@ -29,9 +29,11 @@ export class AuthService {
   async login(username: string, password: string) {
     const user = await this.prisma.user.findUnique({
       where: { username },
-      include: { employee: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } },
+      include: { employee: { include: { organisation: true } }, provisioningOrganisation: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } },
     });
-    if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) throw new UnauthorizedException('Invalid username or password');
+    const roles = user?.roles.map((entry: any) => entry.role.name) ?? [];
+    const organisation = user?.employee?.organisation ?? user?.provisioningOrganisation ?? null;
+    if (!user || !user.isActive || !verifyPassword(password, user.passwordHash) || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) throw new UnauthorizedException('Invalid username or password');
 
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -69,7 +71,12 @@ export class AuthService {
       where: { tokenHash },
       include: { user: { include: { employee: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } } },
     });
-    if (!session || session.expiresAt <= new Date() || !session.user.isActive) throw new UnauthorizedException('Session expired or invalid');
+    const roles = session?.user.roles.map((entry: any) => entry.role.name) ?? [];
+    const organisation = session?.user.employee?.organisation ?? session?.user.provisioningOrganisation ?? null;
+    if (!session || session.expiresAt <= new Date() || !session.user.isActive || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) {
+      if (session?.user.id && organisation && !organisation.isActive) await this.prisma.session.deleteMany({ where: { userId: session.user.id } });
+      throw new UnauthorizedException('Session expired or invalid');
+    }
     return this.presentUser(session.user);
   }
 
