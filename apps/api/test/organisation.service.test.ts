@@ -16,6 +16,12 @@ function basePrisma(existingOrganisationId: string | null) {
       upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
     },
     performancePlan: { count: async () => 0 },
+    session: { deleteMany: async () => ({ count: 1 }) },
+    $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      employee: { upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId, employeeNumber: update.employeeNumber }) },
+      user: { update: async () => ({ id: 'user-a' }) },
+      session: { deleteMany: async () => ({ count: 1 }) },
+    }),
   };
 }
 
