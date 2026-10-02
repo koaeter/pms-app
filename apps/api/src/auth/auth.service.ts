@@ -69,7 +69,7 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const session = await this.prisma.session.findUnique({
       where: { tokenHash },
-      include: { user: { include: { employee: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } } },
+      include: { user: { include: { employee: { include: { organisation: true } }, provisioningOrganisation: true, roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } } },
     });
     const roles = session?.user.roles.map((entry: any) => entry.role.name) ?? [];
     const organisation = session?.user.employee?.organisation ?? session?.user.provisioningOrganisation ?? null;
