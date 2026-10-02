@@ -50,3 +50,27 @@ test('password change rejects weak replacement passwords', async () => {
     (error: any) => error?.response?.message === 'New password must be at least 10 characters',
   );
 });
+
+
+test('login rejects users provisioned for an inactive organisation', async () => {
+  const service = new AuthService({
+    user: { findUnique: async () => ({
+      id: 'user-a', username: 'pending', passwordHash: createPasswordHash('CorrectPassword123'), isActive: true,
+      employee: null, provisioningOrganisation: { id: 'org-a', isActive: false }, roles: [],
+    }) },
+  } as any);
+  await assert.rejects(() => service.login('pending', 'CorrectPassword123'), (error: any) => error?.response?.message === 'Organisation is inactive');
+});
+
+test('system administrators may authenticate through an inactive organisation', async () => {
+  const service = new AuthService({
+    user: { findUnique: async () => ({
+      id: 'root', username: 'root', passwordHash: createPasswordHash('CorrectPassword123'), isActive: true,
+      employee: { id: 'employee-root', organisationId: 'org-a', organisation: { id: 'org-a', isActive: false } },
+      provisioningOrganisation: null, roles: [{ role: { name: 'SYSTEM_ADMIN', permissions: [] } }],
+    }) },
+    session: { create: async ({ data }: any) => ({ ...data }) },
+  } as any);
+  const result = await service.login('root', 'CorrectPassword123');
+  assert.equal(result.user.roles[0], 'SYSTEM_ADMIN');
+});

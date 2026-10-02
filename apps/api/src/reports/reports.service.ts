@@ -54,9 +54,10 @@ export class ReportsService {
   }
 
   private async requireOrganisationAccess(organisationId: string, user: ReportsUser) {
-    const organisation = await this.prisma.organisation.findUnique({ where: { id: organisationId }, select: { id: true } });
+    const organisation = await this.prisma.organisation.findUnique({ where: { id: organisationId }, select: { id: true, isActive: true } });
     if (!organisation) throw new NotFoundException('Organisation not found');
     if (user.roles.includes('SYSTEM_ADMIN')) return;
+    if (!organisation.isActive) throw new ForbiddenException('This organisation is inactive');
     if (user.roles.some((role) => ['PERFORMANCE_ADMIN', 'HR_ADMIN'].includes(role)) && user.organisationId === organisationId) return;
     throw new ForbiddenException('You are not authorised to access this organisation');
   }

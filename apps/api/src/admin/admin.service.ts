@@ -85,9 +85,10 @@ export class AdminService {
     if (employee.userId && employee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
 
     const linked = await this.prisma.$transaction(async (tx: any) => {
-      const freshEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, employeeNumber: true, userId: true, organisationId: true } });
+      const freshEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, employeeNumber: true, userId: true, organisationId: true, employmentStatus: true } });
       const freshUser = await tx.user.findUnique({ where: { id: userId }, select: { id: true, employee: { select: { id: true } }, provisioningOrganisationId: true } });
       if (!freshEmployee || !freshUser) throw new NotFoundException('User or employee not found');
+      if (freshEmployee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be linked to a login account');
       if (freshEmployee.userId && freshEmployee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
       if (freshUser.employee && freshUser.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
 
@@ -126,11 +127,15 @@ export class AdminService {
 
     try {
       const created = await this.prisma.$transaction(async (tx: any) => {
+        const currentEmployee = await tx.employee.findUnique({ where: { id: employeeId }, select: { id: true, userId: true, employmentStatus: true } });
+        if (!currentEmployee) throw new NotFoundException('Employee not found');
+        if (currentEmployee.userId) throw new BadRequestException('Employee already has a user account');
+        if (currentEmployee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can receive a login account');
         const createdUser = await tx.user.create({
           data: { username, passwordHash: createPasswordHash(data.password), firstName, lastName, email },
           select: { id: true, username: true, firstName: true, lastName: true, email: true, isActive: true },
         });
-        const linked = await tx.employee.updateMany({ where: { id: employeeId, userId: null }, data: { userId: createdUser.id } });
+        const linked = await tx.employee.updateMany({ where: { id: employeeId, userId: null, employmentStatus: 'ACTIVE' }, data: { userId: createdUser.id } });
         if (linked.count !== 1) throw new BadRequestException('Employee was linked by another request');
         return createdUser;
       });
@@ -150,11 +155,14 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
+    if (isActive && user.employee && user.employee.employmentStatus === 'EXITED') {
+      throw new BadRequestException('Exited employees cannot have an active login account');
+    }
     const updated = !isActive && user.isActive
       ? await this.prisma.$transaction(async (tx: any) => {
-          const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
+          const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, username: true, isActive: true, employee: { select: { employmentStatus: true } } } });
           if (!target) throw new NotFoundException('User not found');
-          if (!target.isActive) return { id: target.id, username: user.username, isActive: false };
+          if (!target.isActive) return { id: target.id, username: target.username, isActive: false };
           const systemAdminRole = await tx.role.findUnique({ where: { name: 'SYSTEM_ADMIN' } });
           if (systemAdminRole) {
             const activeSystemAdmins = await tx.userRole.count({
@@ -169,8 +177,17 @@ export class AdminService {
           }
           return tx.user.update({ where: { id: userId }, data: { isActive: false }, select: { id: true, username: true, isActive: true } });
         }, { isolationLevel: 'Serializable' })
-      : await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
-    if (!isActive) await this.prisma.session.deleteMany({ where: { userId } });
+      : isActive && !user.isActive
+        ? await this.prisma.$transaction(async (tx: any) => {
+            const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, username: true, isActive: true, employee: { select: { employmentStatus: true } } } });
+            if (!target) throw new NotFoundException('User not found');
+            if (target.employee?.employmentStatus === 'EXITED') {
+              throw new BadRequestException('Exited employees cannot have an active login account');
+            }
+            return tx.user.update({ where: { id: userId }, data: { isActive: true }, select: { id: true, username: true, isActive: true } });
+          }, { isolationLevel: 'Serializable' })
+        : await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
+    if (!isActive || (isActive && !user.isActive)) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
     return updated;
   }

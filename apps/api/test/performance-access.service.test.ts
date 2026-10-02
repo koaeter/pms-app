@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PerformanceAccessService } from '../src/performance/performance-access.service';
 
-const organisation = { id: 'org-a' };
+const organisation = { id: 'org-a', isActive: true };
 const plan = {
   id: 'plan-1',
   employee: {
@@ -111,4 +111,54 @@ test('visible-plan filtering limits ordinary users to themselves and direct repo
     roles: ['SUPERVISOR'],
   });
   assert.deepEqual(result, [plans[0], plans[1]]);
+});
+
+
+test('scoped administrators cannot access an inactive organisation', async () => {
+  const inactive = new PerformanceAccessService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => inactive.requireOrganisationAccess('org-a', { id: 'admin-user', organisationId: 'org-a', roles: ['PERFORMANCE_ADMIN'] }),
+    /organisation is inactive/i,
+  );
+});
+
+test('employees and managers cannot read plans from an inactive organisation', async () => {
+  const inactive = new PerformanceAccessService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+    performancePlan: { findUnique: async () => plan },
+  } as any);
+  await assert.rejects(
+    () => inactive.requirePlanRead('plan-1', {
+      id: 'employee-user',
+      employeeId: 'employee-1',
+      organisationId: 'org-a',
+      roles: ['EMPLOYEE'],
+    }),
+    /organisation is inactive/i,
+  );
+});
+
+
+test('dashboard access rejects an inactive organisation at the service boundary', async () => {
+  const { PerformanceDashboardService } = await import('../src/performance/performance-dashboard.service');
+  const dashboard = new PerformanceDashboardService({
+    employee: { findUnique: async () => ({ id: 'employee-1', userId: 'employee-user', organisationId: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => dashboard.myPlans({ id: 'employee-user', employeeId: 'employee-1', organisationId: 'org-a', roles: ['EMPLOYEE'] }),
+    /organisation is inactive/i,
+  );
+});
+
+test('system administrators retain dashboard access through an inactive organisation', async () => {
+  const { PerformanceDashboardService } = await import('../src/performance/performance-dashboard.service');
+  const dashboard = new PerformanceDashboardService({
+    employee: { findUnique: async () => ({ id: 'employee-1', userId: 'root', organisationId: 'org-a' }) },
+    performancePlan: { findMany: async () => [] },
+  } as any);
+  const result = await dashboard.myPlans({ id: 'root', employeeId: 'employee-1', organisationId: 'org-a', roles: ['SYSTEM_ADMIN'] });
+  assert.deepEqual(result, []);
 });

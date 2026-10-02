@@ -437,12 +437,14 @@ export class PerformanceService {
   private async requireOrganisation(id: string) {
     const organisation = await this.prisma.organisation.findUnique({ where: { id } });
     if (!organisation) throw new NotFoundException('Organisation not found');
+    if (!organisation.isActive) throw new BadRequestException('Organisation is inactive');
     return organisation;
   }
 
   private async requireProgramme(id: string) {
-    const programme = await this.prisma.performanceProgramme.findUnique({ where: { id } });
+    const programme = await this.prisma.performanceProgramme.findUnique({ where: { id }, include: { organisation: true } });
     if (!programme) throw new NotFoundException('Performance programme not found');
+    if (!programme.organisation.isActive) throw new BadRequestException('Organisation is inactive');
     return programme;
   }
 }

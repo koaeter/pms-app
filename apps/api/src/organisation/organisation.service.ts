@@ -33,15 +33,39 @@ export class OrganisationService {
     const code = data.code?.trim().toUpperCase();
     if (data.name !== undefined && !name) throw new BadRequestException('Organisation name is required');
     if (data.code !== undefined && !code) throw new BadRequestException('Organisation code is required');
-    return this.prisma.organisation.update({
-      where: { id },
-      data: {
-        ...(name !== undefined ? { name } : {}),
-        ...(code !== undefined ? { code } : {}),
-        ...(data.description !== undefined ? { description: data.description } : {}),
-        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-      },
+    const updated = await this.prisma.$transaction(async (tx: any) => {
+      const current = await tx.organisation.findUnique({ where: { id }, select: { id: true, isActive: true } });
+      if (!current) throw new NotFoundException('Organisation not found');
+      if (!user.roles.includes('SYSTEM_ADMIN')) {
+        if (!current.isActive) throw new ForbiddenException('This organisation is inactive');
+        if (user.organisationId !== id) throw new ForbiddenException('You are not authorised to access this organisation');
+      }
+      const result = await tx.organisation.update({
+        where: { id },
+        data: {
+          ...(name !== undefined ? { name } : {}),
+          ...(code !== undefined ? { code } : {}),
+          ...(data.description !== undefined ? { description: data.description } : {}),
+          ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        },
+      });
+      if (current.isActive && data.isActive === false) {
+        const users = await tx.user.findMany({
+          where: { OR: [{ employee: { organisationId: id } }, { provisioningOrganisationId: id }] },
+          select: { id: true, roles: { select: { role: { select: { name: true } } } } },
+        });
+        const sessionUserIds = users.filter((account: any) => !account.roles.some((entry: any) => entry.role.name === 'SYSTEM_ADMIN')).map((account: any) => account.id);
+        if (sessionUserIds.length) await tx.session.deleteMany({ where: { userId: { in: sessionUserIds } } });
+      }
+      return { result, wasActive: current.isActive };
+    }, { isolationLevel: 'Serializable' });
+    const result = updated.result;
+    await this.audit?.record('ORGANISATION_UPDATED', 'Organisation', id, user.id, {
+      isActive: updated.isActive,
+      deactivated: updated.wasActive && data.isActive === false,
+      reactivated: !updated.wasActive && data.isActive === true,
     });
+    return updated;
   }
 
   async listDepartments(organisationId: string, user: OrganisationUser) {
@@ -283,6 +307,7 @@ export class OrganisationService {
     const organisation = await this.prisma.organisation.findUnique({ where: { id } });
     if (!organisation) throw new NotFoundException('Organisation not found');
     if (user.roles.includes('SYSTEM_ADMIN')) return organisation;
+    if (!organisation.isActive) throw new ForbiddenException('This organisation is inactive');
     if (user.organisationId === id) return organisation;
     throw new ForbiddenException('You are not authorised to access this organisation');
   }

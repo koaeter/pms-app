@@ -5,7 +5,7 @@ import { OrganisationService } from '../src/organisation/organisation.service';
 
 function basePrisma(existingOrganisationId: string | null) {
   return {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     user: { findUnique: async () => ({ id: 'user-a' }) },
     department: { findFirst: async () => null },
     designation: { findFirst: async () => null },
@@ -14,8 +14,8 @@ function basePrisma(existingOrganisationId: string | null) {
         ? { id: where.userId ? 'employee-a' : where.id, organisationId: existingOrganisationId, managerId: null }
         : null,
       upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
-      performancePlan: { count: async () => 0 },
     },
+    performancePlan: { count: async () => 0 },
   };
 }
 
@@ -44,7 +44,7 @@ test('system administrator can move an existing employee between organisations',
 
 test('employee manager assignment cannot create a reporting cycle', async () => {
   const prisma = {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     user: { findUnique: async () => ({ id: 'user-a' }) },
     department: { findFirst: async () => null },
     designation: { findFirst: async () => null },
@@ -71,7 +71,7 @@ test('employee manager assignment cannot create a reporting cycle', async () => 
 
 test('department parent assignment cannot create a hierarchy cycle', async () => {
   const prisma = {
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     department: {
       findUnique: async ({ where }: any) => {
         if (where.id === 'dept-a') return { id: 'dept-a', parentId: 'dept-b', organisationId: 'org-a' };
@@ -104,4 +104,91 @@ test('organisation creation rejects blank name or code', async () => {
     () => service.createOrganisation({ name: 'Organisation', code: '   ' }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] }),
     (error: any) => error?.response?.message === 'Organisation code is required',
   );
+});
+
+
+test('deactivating an organisation revokes tenant user sessions but preserves system administrator sessions', async () => {
+  const deleted: string[][] = [];
+  const service = new OrganisationService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      organisation: { update: async ({ data }: any) => ({ id: 'org-a', isActive: data.isActive }) },
+      user: { findMany: async () => [
+        { id: 'user-a', roles: [{ role: { name: 'HR_ADMIN' } }] },
+        { id: 'root', roles: [{ role: { name: 'SYSTEM_ADMIN' } }] },
+      ] },
+      session: { deleteMany: async ({ where }: any) => { deleted.push(where.userId.in); return { count: 1 }; } },
+    }),
+  } as any);
+  const result = await service.updateOrganisation('org-a', { isActive: false }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] });
+  assert.equal(result.isActive, false);
+  assert.deepEqual(deleted, [['user-a']]);
+});
+
+test('scoped administrators cannot operate through an inactive organisation', async () => {
+  const service = new OrganisationService({ organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) } } as any);
+  await assert.rejects(
+    () => service.listDepartments('org-a', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] }),
+    (error: any) => error?.response?.message === 'This organisation is inactive',
+  );
+});
+
+
+test('exiting an employee disables the linked login and revokes sessions', async () => {
+  const updates: any[] = [];
+  const revoked: string[] = [];
+  const service = new OrganisationService({
+    employee: {
+      findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a', user: { id: 'user-a', isActive: true } }),
+    },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      employee: {
+        findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a', user: { id: 'user-a', isActive: true } }),
+        updateMany: async ({ data }: any) => { updates.push(data); return { count: 1 }; },
+      },
+      user: { updateMany: async ({ where, data }: any) => { updates.push({ where, data }); return { count: 1 }; } },
+      session: { deleteMany: async ({ where }: any) => { revoked.push(where.userId); return { count: 1 }; } },
+    }),
+  } as any, { record: async () => undefined } as any);
+  const result = await service.updateEmployeeStatus('employee-a', 'EXITED', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] });
+  assert.equal(result?.user?.isActive, true);
+  assert.deepEqual(updates, [
+    { employmentStatus: 'EXITED' },
+    { where: { id: 'user-a' }, data: { isActive: false } },
+  ]);
+  assert.deepEqual(revoked, ['user-a']);
+});
+
+test('returning an exited employee to active does not automatically reactivate the login account', async () => {
+  let status = 'EXITED';
+  const service = new OrganisationService({
+    employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: 'EXITED', userId: 'user-a', user: { id: 'user-a', isActive: false } }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      employee: {
+        findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employmentStatus: status, userId: 'user-a', user: { id: 'user-a', isActive: false } }),
+        updateMany: async () => { status = 'ACTIVE'; return { count: 1 }; },
+      },
+      user: { updateMany: async () => ({ count: 0 }) },
+      session: { deleteMany: async () => ({ count: 0 }) },
+    }),
+  } as any, { record: async () => undefined } as any);
+  const result = await service.updateEmployeeStatus('employee-a', 'ACTIVE', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] });
+  assert.equal(result?.employmentStatus, 'ACTIVE');
+});
+
+
+test('organisation lifecycle changes are audited', async () => {
+  const events: any[] = [];
+  const service = new OrganisationService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    $transaction: async (fn: any) => fn({
+      organisation: { update: async () => ({ id: 'org-a', isActive: false }) },
+      user: { findMany: async () => [] },
+      session: { deleteMany: async () => ({ count: 0 }) },
+    }),
+  } as any, { record: async (...args: any[]) => events.push(args) } as any);
+  await service.updateOrganisation('org-a', { isActive: false }, { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] });
+  assert.deepEqual(events, [['ORGANISATION_UPDATED', 'Organisation', 'org-a', 'root', { isActive: false, deactivated: true, reactivated: false }]]);
 });

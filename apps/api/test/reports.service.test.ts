@@ -7,7 +7,7 @@ function service(organisationId = 'org-a') {
   return new ReportsService({
     organisation: {
       findUnique: async ({ where }: any) =>
-        where.id === organisationId || where.id === 'org-b' ? { id: where.id, name: 'Org', code: where.id.toUpperCase() } : null,
+        where.id === organisationId || where.id === 'org-b' ? { id: where.id, name: 'Org', code: where.id.toUpperCase(), isActive: true } : null,
     },
     performanceCycle: { findMany: async () => [] },
     performancePlan: { findMany: async () => [] },
@@ -54,7 +54,7 @@ test('reports allow a scoped administrator to access its own organisation summar
 test('employee history scopes plans to the employee organisation', async () => {
   let capturedWhere: any;
   const scoped = new ReportsService({
-    organisation: { findUnique: async () => ({ id: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     employee: { findUnique: async () => ({ id: 'employee-a', organisationId: 'org-a', employeeNumber: 'E001', user: { firstName: 'A', lastName: 'User', username: 'a' }, department: null, designation: null }) },
     performancePlan: { findMany: async ({ where }: any) => { capturedWhere = where; return []; } },
   } as any);
@@ -64,7 +64,7 @@ test('employee history scopes plans to the employee organisation', async () => {
 
 test('employee history rejects an employee from another organisation', async () => {
   const crossOrg = new ReportsService({
-    organisation: { findUnique: async () => ({ id: 'org-b' }) },
+    organisation: { findUnique: async () => ({ id: 'org-b', isActive: true }) },
     employee: {
       findUnique: async () => ({
         id: 'employee-b',
@@ -85,5 +85,16 @@ test('employee history rejects an employee from another organisation', async () 
       organisationId: 'org-a',
     }),
     (error: unknown) => error instanceof ForbiddenException,
+  );
+});
+
+
+test('reports reject inactive organisation access for scoped administrators', async () => {
+  const inactive = new ReportsService({
+    organisation: { findUnique: async () => ({ id: 'org-a', name: 'Org', code: 'ORG-A', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => inactive.performanceSummary('org-a', { id: 'admin-a', roles: ['PERFORMANCE_ADMIN'], permissions: ['reports.read'], organisationId: 'org-a' }),
+    /organisation is inactive/i,
   );
 });
