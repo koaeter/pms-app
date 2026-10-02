@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma.service';
 import { createPasswordHash } from '../auth/auth.service';
 import { AuditService } from '../audit.service';
+import { EmployeeLifecyclePolicy } from '../lifecycle/employee-lifecycle.policy';
 
 @Injectable()
 export class AdminService {
@@ -150,7 +151,7 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
-    if (isActive && user.employee && user.employee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can have an active login account');
+    if (isActive && user.employee && !EmployeeLifecyclePolicy.accountShouldBeActive(user.employee.employmentStatus)) throw new BadRequestException('Only active or on-leave employees can have an active login account');
     if (isActive && !user.employee && user.provisioningOrganisationId) {
       const organisation = await this.prisma.organisation.findUnique({ where: { id: user.provisioningOrganisationId }, select: { isActive: true } });
       if (!organisation?.isActive) throw new BadRequestException('Cannot activate an account for an inactive organisation');
