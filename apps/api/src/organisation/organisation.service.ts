@@ -34,6 +34,12 @@ export class OrganisationService {
     if (data.name !== undefined && !name) throw new BadRequestException('Organisation name is required');
     if (data.code !== undefined && !code) throw new BadRequestException('Organisation code is required');
     const updated = await this.prisma.$transaction(async (tx: any) => {
+      const current = await tx.organisation.findUnique({ where: { id }, select: { id: true, isActive: true } });
+      if (!current) throw new NotFoundException('Organisation not found');
+      if (!user.roles.includes('SYSTEM_ADMIN')) {
+        if (!current.isActive) throw new ForbiddenException('This organisation is inactive');
+        if (user.organisationId !== id) throw new ForbiddenException('You are not authorised to access this organisation');
+      }
       const result = await tx.organisation.update({
         where: { id },
         data: {
@@ -43,7 +49,7 @@ export class OrganisationService {
           ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         },
       });
-      if (currentOrganisation.isActive && data.isActive === false) {
+      if (current.isActive && data.isActive === false) {
         const users = await tx.user.findMany({
           where: { OR: [{ employee: { organisationId: id } }, { provisioningOrganisationId: id }] },
           select: { id: true, roles: { select: { role: { select: { name: true } } } } },
@@ -51,12 +57,13 @@ export class OrganisationService {
         const sessionUserIds = users.filter((account: any) => !account.roles.some((entry: any) => entry.role.name === 'SYSTEM_ADMIN')).map((account: any) => account.id);
         if (sessionUserIds.length) await tx.session.deleteMany({ where: { userId: { in: sessionUserIds } } });
       }
-      return result;
+      return { result, wasActive: current.isActive };
     }, { isolationLevel: 'Serializable' });
+    const result = updated.result;
     await this.audit?.record('ORGANISATION_UPDATED', 'Organisation', id, user.id, {
       isActive: updated.isActive,
-      deactivated: currentOrganisation.isActive && data.isActive === false,
-      reactivated: !currentOrganisation.isActive && data.isActive === true,
+      deactivated: updated.wasActive && data.isActive === false,
+      reactivated: !updated.wasActive && data.isActive === true,
     });
     return updated;
   }
