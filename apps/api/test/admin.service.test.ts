@@ -395,3 +395,22 @@ test('employee account creation rechecks employment status inside the transactio
     (error: any) => error?.response?.message === 'Only active employees can receive a login account',
   );
 });
+
+
+test('employee exit racing with login reactivation is rejected inside the transaction', async () => {
+  const admin = new AdminService({
+    user: {
+      findUnique: async () => ({ id: 'user-a', isActive: false, employee: { organisationId: 'org-a', employmentStatus: 'ACTIVE' } }),
+    },
+    $transaction: async (fn: any) => fn({
+      user: {
+        findUnique: async () => ({ id: 'user-a', username: 'user-a', isActive: false, employee: { employmentStatus: 'EXITED' } }),
+        update: async () => { throw new Error('user update must not occur'); },
+      },
+    }),
+  } as any, { record: async () => undefined } as any);
+  await assert.rejects(
+    () => admin.setUserStatus({ id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' }, 'user-a', true),
+    (error: any) => error?.response?.message === 'Exited employees cannot have an active login account',
+  );
+});
