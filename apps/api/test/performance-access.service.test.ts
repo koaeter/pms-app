@@ -139,3 +139,26 @@ test('employees and managers cannot read plans from an inactive organisation', a
     /organisation is inactive/i,
   );
 });
+
+
+test('dashboard access rejects an inactive organisation at the service boundary', async () => {
+  const { PerformanceDashboardService } = await import('../src/performance/performance-dashboard.service');
+  const dashboard = new PerformanceDashboardService({
+    employee: { findUnique: async () => ({ id: 'employee-1', userId: 'employee-user', organisationId: 'org-a' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => dashboard.myPlans({ id: 'employee-user', employeeId: 'employee-1', organisationId: 'org-a', roles: ['EMPLOYEE'] }),
+    /organisation is inactive/i,
+  );
+});
+
+test('system administrators retain dashboard access through an inactive organisation', async () => {
+  const { PerformanceDashboardService } = await import('../src/performance/performance-dashboard.service');
+  const dashboard = new PerformanceDashboardService({
+    employee: { findUnique: async () => ({ id: 'employee-1', userId: 'root', organisationId: 'org-a' }) },
+    performancePlan: { findMany: async () => [] },
+  } as any);
+  const result = await dashboard.myPlans({ id: 'root', employeeId: 'employee-1', organisationId: 'org-a', roles: ['SYSTEM_ADMIN'] });
+  assert.deepEqual(result, []);
+});
