@@ -6,6 +6,7 @@ const organisation = { id: 'org-a' };
 const plan = {
   id: 'plan-1',
   supervisorId: 'manager-1',
+  supervisor: { userId: 'manager-user' },
   employee: {
     organisationId: 'org-a',
     userId: 'employee-user',
