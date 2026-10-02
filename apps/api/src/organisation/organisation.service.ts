@@ -162,7 +162,11 @@ export class OrganisationService {
     if (email && !/^\S+@\S+\.\S+$/.test(email)) throw new BadRequestException('Email address is invalid');
     if (data.departmentId && !(await this.prisma.department.findFirst({ where: { id: data.departmentId, organisationId: data.organisationId } }))) throw new NotFoundException('Department not found in this organisation');
     if (data.designationId && !(await this.prisma.designation.findFirst({ where: { id: data.designationId, organisationId: data.organisationId } }))) throw new NotFoundException('Designation not found in this organisation');
-    if (data.managerId && !(await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId } }))) throw new NotFoundException('Manager not found in this organisation');
+    if (data.managerId) {
+      const manager = await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId }, select: { id: true, employmentStatus: true } });
+      if (!manager) throw new NotFoundException('Manager not found in this organisation');
+      if (manager.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be assigned as managers');
+    }
 
     try {
       return await this.prisma.$transaction(async (tx: any) => {
