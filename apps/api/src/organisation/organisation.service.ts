@@ -227,8 +227,13 @@ export class OrganisationService {
     if (data.designationId && !(await this.prisma.designation.findFirst({ where: { id: data.designationId, organisationId: data.organisationId } }))) {
       throw new NotFoundException('Designation not found in this organisation');
     }
-    if (data.managerId && !(await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId } }))) {
-      throw new NotFoundException('Manager not found in this organisation');
+    if (data.managerId) {
+      const manager = await this.prisma.employee.findFirst({
+        where: { id: data.managerId, organisationId: data.organisationId },
+        select: { id: true, employmentStatus: true },
+      });
+      if (!manager) throw new NotFoundException('Manager not found in this organisation');
+      if (manager.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be assigned as managers');
     }
     if (data.managerId) {
       const visited = new Set<string>();
