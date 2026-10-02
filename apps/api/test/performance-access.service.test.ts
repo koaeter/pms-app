@@ -88,8 +88,8 @@ test('non-admin employees cannot manage a plan they can read', async () => {
 
 test('visible-plan filtering never exposes another organisation to a scoped admin', () => {
   const plans = [
-    { employee: { userId: 'a', managerId: null, organisationId: 'org-a' } },
-    { employee: { userId: 'b', managerId: null, organisationId: 'org-b' } },
+    { supervisorId: 'manager-a', employee: { userId: 'a', organisationId: 'org-a' } },
+    { supervisorId: 'manager-b', employee: { userId: 'b', organisationId: 'org-b' } },
   ];
   const result = service().filterVisiblePlans(plans, {
     id: 'admin-user',
@@ -101,9 +101,9 @@ test('visible-plan filtering never exposes another organisation to a scoped admi
 
 test('visible-plan filtering limits ordinary users to themselves and direct reports', () => {
   const plans = [
-    { employee: { userId: 'employee-user', managerId: 'manager-1', organisationId: 'org-a' } },
-    { employee: { userId: 'report-user', managerId: 'manager-1', organisationId: 'org-a' } },
-    { employee: { userId: 'other-user', managerId: 'other-manager', organisationId: 'org-a' } },
+    { supervisorId: 'manager-1', employee: { userId: 'employee-user', organisationId: 'org-a' } },
+    { supervisorId: 'manager-1', employee: { userId: 'report-user', organisationId: 'org-a' } },
+    { supervisorId: 'other-manager', employee: { userId: 'other-user', organisationId: 'org-a' } },
   ];
   const result = service().filterVisiblePlans(plans, {
     id: 'manager-user',
