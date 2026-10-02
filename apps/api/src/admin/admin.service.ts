@@ -53,7 +53,10 @@ export class AdminService {
     if (!isSystemAdmin && !actor.organisationId) {
       throw new ForbiddenException('Your account is not associated with an organisation');
     }
-    if (provisioningOrganisationId) this.requireTargetOrganisation(actor, provisioningOrganisationId);
+    if (provisioningOrganisationId) {
+      this.requireTargetOrganisation(actor, provisioningOrganisationId);
+      await this.requireActiveOrganisation(provisioningOrganisationId);
+    }
 
     try {
       const user = await this.prisma.user.create({
@@ -80,6 +83,8 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     if (!employee) throw new NotFoundException('Employee not found');
     this.requireTargetOrganisation(actor, employee.organisationId ?? null);
+    this.requireTargetOrganisation(actor, employee.organisationId ?? null);
+    if (employee.organisationId) await this.requireActiveOrganisation(employee.organisationId);
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     if (user.employee && user.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
     if (!EmployeeLifecyclePolicy.accountShouldBeActive(employee.employmentStatus)) throw new BadRequestException('Only active or on-leave employees can be linked to a login account');
@@ -113,6 +118,7 @@ export class AdminService {
     const employee = await this.prisma.employee.findUnique({ where: { id: employeeId }, include: { user: true } });
     if (!employee) throw new NotFoundException('Employee not found');
     this.requireTargetOrganisation(actor, employee.organisationId ?? null);
+    if (employee.organisationId) await this.requireActiveOrganisation(employee.organisationId);
     if (employee.userId) throw new BadRequestException('Employee already has a user account');
     if (!EmployeeLifecyclePolicy.accountShouldBeActive(employee.employmentStatus)) throw new BadRequestException('Only active or on-leave employees can receive a login account');
 
@@ -183,6 +189,12 @@ export class AdminService {
     if (!isActive) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
     return updated;
+  }
+
+  private async requireActiveOrganisation(id: string) {
+    const organisation = await this.prisma.organisation.findUnique({ where: { id }, select: { isActive: true } });
+    if (!organisation) throw new NotFoundException('Organisation not found');
+    if (!organisation.isActive) throw new BadRequestException('Cannot provision a login account in an inactive organisation');
   }
 
   listRoles(user: { permissions: string[] }) {
