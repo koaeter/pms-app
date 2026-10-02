@@ -321,6 +321,24 @@ test('an unlinked employee can receive a login account', async () => {
 });
 
 
+test('an on-leave employee can receive a login account', async () => {
+  const admin = new AdminService({
+    employee: { findUnique: async () => ({ id: 'employee-leave', userId: null, organisationId: 'org-a', employmentStatus: 'ON_LEAVE', user: null }) },
+    $transaction: async (fn: any) => fn({
+      user: { create: async () => ({ id: 'user-leave', username: 'leave-login', firstName: 'Leave', lastName: 'User', email: null, isActive: true }) },
+      employee: { updateMany: async () => ({ count: 1 }) },
+    }),
+  } as any, { record: async () => undefined } as any);
+
+  const result = await admin.createAccountForEmployee(
+    { id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' },
+    'employee-leave',
+    { username: 'leave-login', password: 'valid-password', firstName: 'Leave', lastName: 'User' },
+  );
+  assert.equal(result.id, 'user-leave');
+});
+
+
 test('employee account creation is conditional and does not overwrite a concurrent link', async () => {
   let created = false;
   const admin = new AdminService({
