@@ -342,6 +342,23 @@ test('employee account creation is conditional and does not overwrite a concurre
 });
 
 
+test('reactivating a login in an inactive organisation is rejected', async () => {
+  const admin = new AdminService({
+    user: {
+      findUnique: async () => ({ id: 'user-a', isActive: false, employee: { organisationId: 'org-a', employmentStatus: 'ACTIVE' } }),
+    },
+    organisation: {
+      findUnique: async () => ({ isActive: false }),
+    },
+  } as any, { record: async () => undefined } as any);
+
+  await assert.rejects(
+    () => admin.setUserStatus({ id: 'admin-a', permissions: ['users.manage'], roles: ['SYSTEM_ADMIN'], organisationId: null }, 'user-a', true),
+    (error: any) => error?.response?.message === 'Cannot activate an account for an inactive organisation',
+  );
+});
+
+
 test('reactivating a login linked to a non-active employee is rejected', async () => {
   const admin = new AdminService({
     user: {
