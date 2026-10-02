@@ -38,7 +38,7 @@ export class PerformanceAccessService {
   async requirePlanRead(planId: string, user: ScopedUser) {
     const plan = await this.prisma.performancePlan.findUnique({
       where: { id: planId },
-      include: { employee: { include: { user: true, manager: true } } },
+      include: { employee: { include: { user: true, manager: true } }, supervisor: { include: { user: true } } },
     });
     if (!plan) throw new NotFoundException('Performance plan not found');
 
