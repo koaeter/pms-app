@@ -288,7 +288,7 @@ export class OrganisationService {
       }
     }
     const result = await this.prisma.employee.upsert({ where: { userId: data.userId }, create: { ...data, employeeNumber: data.employeeNumber.trim() }, update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId } });
-    await this.prisma.user?.update({ where: { id: data.userId }, data: { provisioningOrganisationId: null } });
+    await this.prisma.user?.update?.({ where: { id: data.userId }, data: { provisioningOrganisationId: null } });
     if (existing && existing.organisationId !== data.organisationId) {
       await this.prisma.session?.deleteMany({ where: { userId: data.userId } });
       await this.audit?.record('EMPLOYEE_ORGANISATION_TRANSFERRED', 'Employee', result.id, user.id, {
