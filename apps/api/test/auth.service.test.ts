@@ -50,3 +50,41 @@ test('password change rejects weak replacement passwords', async () => {
     (error: any) => error?.response?.message === 'New password must be at least 10 characters',
   );
 });
+
+
+test('inactive organisations cannot authenticate scoped users', async () => {
+  const service = new AuthService({
+    user: {
+      findUnique: async () => ({
+        id: 'user-a', isActive: true, username: 'user-a', passwordHash: createPasswordHash('CorrectPassword123'),
+        employee: { organisation: { id: 'org-a', isActive: false } },
+        provisioningOrganisation: null,
+        roles: [{ role: { name: 'EMPLOYEE', permissions: [] } }],
+      }),
+    },
+  } as any);
+  await assert.rejects(
+    () => service.login('user-a', 'CorrectPassword123'),
+    (error: any) => error?.response?.message === 'Invalid username or password',
+  );
+});
+
+test('inactive organisation invalidates an existing session', async () => {
+  let revoked = false;
+  const service = new AuthService({
+    session: {
+      findUnique: async () => ({
+        expiresAt: new Date(Date.now() + 60_000),
+        user: {
+          id: 'user-a', isActive: true,
+          employee: { organisation: { id: 'org-a', isActive: false } },
+          provisioningOrganisation: null,
+          roles: [{ role: { name: 'EMPLOYEE', permissions: [] } }],
+        },
+      }),
+      deleteMany: async ({ where }: any) => { revoked = where.userId === 'user-a'; return { count: 1 }; },
+    },
+  } as any);
+  await assert.rejects(() => service.currentUser('token'), /Session expired or invalid/);
+  assert.equal(revoked, true);
+});
