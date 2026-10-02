@@ -42,6 +42,26 @@ test('system administrator can move an existing employee between organisations',
   assert.equal(result.organisationId, 'org-a');
 });
 
+test('employee creation rejects an inactive manager', async () => {
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    department: { findFirst: async () => null },
+    designation: { findFirst: async () => null },
+    employee: {
+      findFirst: async () => ({ id: 'manager-a', organisationId: 'org-a', employmentStatus: 'SUSPENDED' }),
+    },
+  };
+
+  await assert.rejects(
+    () => new OrganisationService(prisma as any, { record: async () => undefined } as any).createEmployee(
+      { employeeNumber: 'E002', organisationId: 'org-a', managerId: 'manager-a' },
+      { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+    ),
+    (error: any) => error?.response?.message === 'Only active employees can be assigned as managers',
+  );
+});
+
+
 test('employee manager assignment cannot create a reporting cycle', async () => {
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-a' }) },
@@ -54,7 +74,7 @@ test('employee manager assignment cannot create a reporting cycle', async () => 
         if (where.id === 'employee-b') return { id: 'employee-b', organisationId: 'org-a', managerId: 'employee-a' };
         return null;
       },
-      findFirst: async ({ where }: any) => ({ id: where.id, organisationId: where.organisationId }),
+      findFirst: async ({ where }: any) => ({ id: where.id, organisationId: where.organisationId, employmentStatus: 'ACTIVE' }),
       upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId }),
     },
   };
