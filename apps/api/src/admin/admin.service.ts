@@ -82,7 +82,7 @@ export class AdminService {
     this.requireTargetOrganisation(actor, employee.organisationId ?? null);
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     if (user.employee && user.employee.id !== employeeId) throw new BadRequestException('User is already linked to an employee');
-    if (employee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be linked to a login account');
+    if (!EmployeeLifecyclePolicy.accountShouldBeActive(employee.employmentStatus)) throw new BadRequestException('Only active or on-leave employees can be linked to a login account');
     if (employee.userId && employee.userId !== userId) throw new BadRequestException('Employee is already linked to another user');
 
     const linked = await this.prisma.$transaction(async (tx: any) => {
@@ -114,7 +114,7 @@ export class AdminService {
     if (!employee) throw new NotFoundException('Employee not found');
     this.requireTargetOrganisation(actor, employee.organisationId ?? null);
     if (employee.userId) throw new BadRequestException('Employee already has a user account');
-    if (employee.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can receive a login account');
+    if (!EmployeeLifecyclePolicy.accountShouldBeActive(employee.employmentStatus)) throw new BadRequestException('Only active or on-leave employees can receive a login account');
 
     const username = data.username.trim();
     const firstName = data.firstName?.trim() || employee.user?.firstName || 'Employee';
