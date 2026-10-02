@@ -5,10 +5,11 @@ import { PerformanceAccessService } from '../src/performance/performance-access.
 const organisation = { id: 'org-a' };
 const plan = {
   id: 'plan-1',
+  supervisorId: 'manager-1',
   employee: {
     organisationId: 'org-a',
     userId: 'employee-user',
-    managerId: 'manager-1',
+    managerId: 'manager-2',
     user: { id: 'employee-user' },
     manager: { userId: 'manager-user' },
   },
@@ -111,4 +112,25 @@ test('visible-plan filtering limits ordinary users to themselves and direct repo
     roles: ['SUPERVISOR'],
   });
   assert.deepEqual(result, [plans[0], plans[1]]);
+});
+
+
+test('plan read access follows the historical supervisor snapshot, not the current manager', async () => {
+  const result = await service().requirePlanRead('plan-1', {
+    id: 'manager-user',
+    employeeId: 'manager-1',
+    organisationId: 'org-a',
+    roles: ['SUPERVISOR'],
+  });
+  assert.equal(result.id, 'plan-1');
+
+  await assert.rejects(
+    () => service().requirePlanRead('plan-1', {
+      id: 'new-manager-user',
+      employeeId: 'manager-2',
+      organisationId: 'org-a',
+      roles: ['SUPERVISOR'],
+    }),
+    /not authorised/,
+  );
 });
