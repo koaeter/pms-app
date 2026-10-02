@@ -160,9 +160,9 @@ export class AdminService {
     }
     const updated = !isActive && user.isActive
       ? await this.prisma.$transaction(async (tx: any) => {
-          const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
+          const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, username: true, isActive: true, employee: { select: { employmentStatus: true } } } });
           if (!target) throw new NotFoundException('User not found');
-          if (!target.isActive) return { id: target.id, username: user.username, isActive: false };
+          if (!target.isActive) return { id: target.id, username: target.username, isActive: false };
           const systemAdminRole = await tx.role.findUnique({ where: { name: 'SYSTEM_ADMIN' } });
           if (systemAdminRole) {
             const activeSystemAdmins = await tx.userRole.count({
@@ -177,7 +177,16 @@ export class AdminService {
           }
           return tx.user.update({ where: { id: userId }, data: { isActive: false }, select: { id: true, username: true, isActive: true } });
         }, { isolationLevel: 'Serializable' })
-      : await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
+      : isActive && !user.isActive
+        ? await this.prisma.$transaction(async (tx: any) => {
+            const target = await tx.user.findUnique({ where: { id: userId }, select: { id: true, username: true, isActive: true, employee: { select: { employmentStatus: true } } } });
+            if (!target) throw new NotFoundException('User not found');
+            if (target.employee?.employmentStatus === 'EXITED') {
+              throw new BadRequestException('Exited employees cannot have an active login account');
+            }
+            return tx.user.update({ where: { id: userId }, data: { isActive: true }, select: { id: true, username: true, isActive: true } });
+          }, { isolationLevel: 'Serializable' })
+        : await this.prisma.user.update({ where: { id: userId }, data: { isActive }, select: { id: true, username: true, isActive: true } });
     if (!isActive || (isActive && !user.isActive)) await this.prisma.session.deleteMany({ where: { userId } });
     await this.audit.record('USER_STATUS_CHANGED', 'User', userId, actor.id, { isActive });
     return updated;
