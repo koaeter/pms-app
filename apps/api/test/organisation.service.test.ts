@@ -244,3 +244,67 @@ test('inactive organisation denies scoped access', async () => {
     (error: any) => error?.response?.message === 'This organisation is inactive',
   );
 });
+
+
+test('suspending a manager preserves direct reports and notifies active organisation administrators', async () => {
+  let notificationCreates = 0;
+  let updatedStatus = '';
+  const employee = {
+    id: 'manager-a',
+    organisationId: 'org-a',
+    employmentStatus: 'ACTIVE',
+    userId: 'user-a',
+    employeeNumber: 'M001',
+    user: { firstName: 'Manager', lastName: 'One' },
+  };
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    employee: {
+      findUnique: async () => employee,
+    },
+    $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      employee: {
+        findUnique: async () => employee,
+        updateMany: async ({ data }: any) => { updatedStatus = data.employmentStatus; return { count: 1 }; },
+        findMany: async ({ where }: any) => {
+          assert.equal(where.managerId, 'manager-a');
+          assert.equal(where.organisationId, 'org-a');
+          return [
+            { employeeNumber: 'E002', user: { firstName: 'Report', lastName: 'One' } },
+            { employeeNumber: 'E003', user: { firstName: 'Report', lastName: 'Two' } },
+          ];
+        },
+      },
+      user: {
+        updateMany: async () => ({ count: 1 }),
+        findMany: async ({ where }: any) => {
+          assert.equal(where.isActive, true);
+          return [{ id: 'admin-a' }, { id: 'admin-b' }];
+        },
+      },
+      session: {
+        deleteMany: async () => ({ count: 2 }),
+      },
+      notification: {
+        createMany: async ({ data }: any) => {
+          notificationCreates += data.length;
+          assert.equal(data[0].title, 'Reporting relationship requires review');
+          assert.match(data[0].message, /Manager One is now suspended/);
+          assert.match(data[0].message, /2 direct reports/);
+          assert.match(data[0].message, /Report One, Report Two/);
+          assert.equal(data[0].link, '/admin/organisation');
+          return { count: data.length };
+        },
+      },
+    }),
+  };
+
+  await new OrganisationService(prisma as any, { record: async () => undefined } as any).updateEmployeeStatus(
+    'manager-a',
+    'SUSPENDED',
+    { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+  );
+
+  assert.equal(updatedStatus, 'SUSPENDED');
+  assert.equal(notificationCreates, 2);
+});
