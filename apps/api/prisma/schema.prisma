@@ -84,6 +84,7 @@ model Employee {
   reviewerPlans PerformancePlan[] @relation("PerformancePlanReviewer")
   finalAssessorPlans PerformancePlan[] @relation("PerformancePlanFinalAssessor")
   assessmentsGiven PerformanceAssessment[] @relation("Assessor")
+  assessmentRevisionsGiven PerformanceAssessmentRevision[] @relation("AssessmentRevisionActor")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([organisationId])
@@ -353,6 +354,7 @@ model PerformanceAssessment {
   plan PerformancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   assessor Employee @relation("Assessor", fields: [assessorId], references: [id])
   items PerformanceAssessmentItem[]
+  revisions PerformanceAssessmentRevision[] @relation("AssessmentRevisions")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([planId, assessorId, assessorType])
@@ -388,4 +390,22 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([actorId, createdAt])
   @@index([organisationId, createdAt])
+}
+
+
+model PerformanceAssessmentRevision {
+  id String @id @default(uuid())
+  assessmentId String
+  assessorId String
+  assessorType AssessorType
+  action String
+  status AssessmentStatus
+  overallScore Decimal? @db.Decimal(7,2)
+  comment String?
+  snapshot Json
+  assessment PerformanceAssessment @relation("AssessmentRevisions", fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessor Employee @relation("AssessmentRevisionActor", fields: [assessorId], references: [id])
+  createdAt DateTime @default(now())
+  @@index([assessmentId, createdAt])
+  @@index([assessorId, createdAt])
 }
