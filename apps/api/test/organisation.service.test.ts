@@ -95,6 +95,20 @@ test('employee manager assignment cannot create a reporting cycle', async () => 
 });
 
 
+test('employee creation with account rejects inactive organisations', async () => {
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  };
+
+  await assert.rejects(
+    () => new OrganisationService(prisma as any).createEmployeeWithAccount(
+      { username: 'new-user', password: 'long-enough-password', firstName: 'New', lastName: 'User', employeeNumber: 'E004', organisationId: 'org-a' },
+      { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] },
+    ),
+    (error: any) => error?.response?.message === 'Cannot provision a login account in an inactive organisation',
+  );
+});
+
 test('employee creation with account cannot create a reporting cycle', async () => {
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
