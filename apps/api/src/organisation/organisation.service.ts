@@ -166,6 +166,19 @@ export class OrganisationService {
       const manager = await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId }, select: { id: true, employmentStatus: true } });
       if (!manager) throw new NotFoundException('Manager not found in this organisation');
       if (manager.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be assigned as managers');
+
+      const visited = new Set<string>();
+      let currentId: string | null = data.managerId;
+      while (currentId) {
+        if (visited.has(currentId)) throw new BadRequestException('Manager assignment contains an organisational reporting cycle');
+        visited.add(currentId);
+        const current: { id: string; managerId: string | null; organisationId: string | null } | null = await this.prisma.employee.findUnique({
+          where: { id: currentId },
+          select: { id: true, managerId: true, organisationId: true },
+        });
+        if (!current || current.organisationId !== data.organisationId) break;
+        currentId = current.managerId;
+      }
     }
 
     try {
