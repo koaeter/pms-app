@@ -316,7 +316,7 @@ export class OrganisationService {
       }
       return employee;
     });
-    if (movedOrganisation) {
+    if (movedOrganisation && existing) {
       await this.audit?.record('EMPLOYEE_ORGANISATION_TRANSFERRED', 'Employee', result.id, user.id, {
         userId: data.userId,
         fromOrganisationId: existing.organisationId,
