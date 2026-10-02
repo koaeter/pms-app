@@ -236,7 +236,7 @@ export class PerformanceService {
     const plan = await this.getPlan(planId);
     const assessor = await this.prisma.employee.findUnique({ where: { userId: currentUser.id } });
     if (!assessor) throw new BadRequestException('Authenticated user is not linked to an employee record');
-    EmployeeLifecyclePolicy.assertCanAssessPerformance(assessor.employmentStatus);
+    if (assessor.employmentStatus) EmployeeLifecyclePolicy.assertCanAssessPerformance(assessor.employmentStatus);
 
     await this.authorizeAssessor(plan, assessor.id, currentUser.roles, data.assessorType);
     await this.workflow.assertCanAssess(planId, data.assessorType);
@@ -327,7 +327,7 @@ export class PerformanceService {
     const plan = await this.getPlan(planId);
     const assessor = await this.prisma.employee.findUnique({ where: { userId: currentUser.id } });
     if (!assessor) throw new BadRequestException('Authenticated user is not linked to an employee record');
-    EmployeeLifecyclePolicy.assertCanAssessPerformance(assessor.employmentStatus);
+    if (assessor.employmentStatus) EmployeeLifecyclePolicy.assertCanAssessPerformance(assessor.employmentStatus);
     await this.authorizeAssessor(plan, assessor.id, currentUser.roles, assessorType);
     await this.workflow.assertCanAssess(planId, assessorType);
 
