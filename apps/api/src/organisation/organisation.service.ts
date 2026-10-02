@@ -222,6 +222,55 @@ export class OrganisationService {
         await tx.user.updateMany({ where: { id: current.userId }, data: { isActive: false } });
         await tx.session.deleteMany({ where: { userId: current.userId } });
       }
+
+      if ((status === 'SUSPENDED' || status === 'EXITED') && current.organisationId) {
+        const reports = await tx.employee.findMany({
+          where: { managerId: employeeId, organisationId: current.organisationId },
+          select: {
+            employeeNumber: true,
+            user: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: { employeeNumber: 'asc' },
+        });
+
+        if (reports.length > 0) {
+          const administrators = await tx.user.findMany({
+            where: {
+              isActive: true,
+              roles: { some: { role: { name: { in: ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'] } } } },
+              OR: [
+                { employee: { organisationId: current.organisationId } },
+                { roles: { some: { role: { name: 'SYSTEM_ADMIN' } } } },
+              ],
+            },
+            select: { id: true },
+          });
+
+          const employeeName = current.user
+            ? [current.user.firstName, current.user.lastName].filter(Boolean).join(' ')
+            : current.employeeNumber;
+          const reportSummary = reports
+            .map((report: any) => {
+              const name = report.user
+                ? [report.user.firstName, report.user.lastName].filter(Boolean).join(' ')
+                : report.employeeNumber;
+              return name || report.employeeNumber;
+            })
+            .join(', ');
+
+          if (administrators.length > 0) {
+            await tx.notification.createMany({
+              data: administrators.map((administrator: { id: string }) => ({
+                userId: administrator.id,
+                title: 'Reporting relationship requires review',
+                message: employeeName + ' is now ' + status.toLowerCase() + ' and still has ' + reports.length + ' direct report' + (reports.length === 1 ? '' : 's') + ' assigned. Existing manager assignments were preserved; review and reassign the affected reporting relationships if required. Affected employees: ' + reportSummary + '.',
+                link: '/admin/organisation',
+              })),
+            });
+          }
+        }
+      }
+
       return tx.employee.findUnique({
         where: { id: employeeId },
         include: { user: { select: { id: true, username: true, isActive: true } } },
