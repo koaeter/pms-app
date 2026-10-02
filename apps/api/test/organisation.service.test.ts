@@ -105,3 +105,14 @@ test('organisation creation rejects blank name or code', async () => {
     (error: any) => error?.response?.message === 'Organisation code is required',
   );
 });
+
+
+test('inactive organisation denies scoped access', async () => {
+  const service = new OrganisationService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+  await assert.rejects(
+    () => service['requireOrganisationAccess']('org-a', { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] }),
+    (error: any) => error?.response?.message === 'This organisation is inactive',
+  );
+});
