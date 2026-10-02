@@ -203,10 +203,7 @@ export class OrganisationService {
       if (current.userId && !EmployeeLifecyclePolicy.accountShouldBeActive(status)) {
         await tx.user.updateMany({ where: { id: current.userId }, data: { isActive: false } });
         await tx.session.deleteMany({ where: { userId: current.userId } });
-      } else if (current.userId && EmployeeLifecyclePolicy.accountShouldBeActive(status)) {
-        await tx.user.updateMany({ where: { id: current.userId }, data: { isActive: true } });
-        await tx.session.deleteMany({ where: { userId: current.userId } });
-      }
+
       return tx.employee.findUnique({
         where: { id: employeeId },
         include: { user: { select: { id: true, username: true, isActive: true } } },
