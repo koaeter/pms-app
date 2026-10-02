@@ -33,6 +33,30 @@ export class OrganisationService {
     const code = data.code?.trim().toUpperCase();
     if (data.name !== undefined && !name) throw new BadRequestException('Organisation name is required');
     if (data.code !== undefined && !code) throw new BadRequestException('Organisation code is required');
+    if (data.isActive === false) {
+      const result = await this.prisma.$transaction(async (tx: any) => {
+        const organisation = await tx.organisation.update({
+          where: { id },
+          data: {
+            ...(name !== undefined ? { name } : {}),
+            ...(code !== undefined ? { code } : {}),
+            ...(data.description !== undefined ? { description: data.description } : {}),
+            isActive: false,
+          },
+        });
+        const users = await tx.user.findMany({
+          where: { OR: [{ employee: { organisationId: id } }, { provisioningOrganisationId: id }], isActive: true },
+          select: { id: true },
+        });
+        if (users.length) {
+          await tx.user.updateMany({ where: { id: { in: users.map((item: any) => item.id) } }, data: { isActive: false } });
+          await tx.session.deleteMany({ where: { userId: { in: users.map((item: any) => item.id) } } });
+        }
+        return organisation;
+      }, { isolationLevel: 'Serializable' });
+      await this.audit?.record('ORGANISATION_DEACTIVATED', 'Organisation', id, user.id, { deactivatedUserCount: 'scoped accounts disabled' });
+      return result;
+    }
     return this.prisma.organisation.update({
       where: { id },
       data: {
@@ -283,6 +307,7 @@ export class OrganisationService {
     const organisation = await this.prisma.organisation.findUnique({ where: { id } });
     if (!organisation) throw new NotFoundException('Organisation not found');
     if (user.roles.includes('SYSTEM_ADMIN')) return organisation;
+    if (!organisation.isActive) throw new ForbiddenException('This organisation is inactive');
     if (user.organisationId === id) return organisation;
     throw new ForbiddenException('You are not authorised to access this organisation');
   }
