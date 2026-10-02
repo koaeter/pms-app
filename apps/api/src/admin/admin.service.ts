@@ -152,6 +152,10 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     this.requireTargetOrganisation(actor, user.employee?.organisationId ?? user.provisioningOrganisationId ?? null);
     if (isActive && user.employee && !EmployeeLifecyclePolicy.accountShouldBeActive(user.employee.employmentStatus)) throw new BadRequestException('Only active or on-leave employees can have an active login account');
+    if (isActive && user.employee?.organisationId) {
+      const organisation = await this.prisma.organisation.findUnique({ where: { id: user.employee.organisationId }, select: { isActive: true } });
+      if (!organisation?.isActive) throw new BadRequestException('Cannot activate an account for an inactive organisation');
+    }
     if (isActive && !user.employee && user.provisioningOrganisationId) {
       const organisation = await this.prisma.organisation.findUnique({ where: { id: user.provisioningOrganisationId }, select: { isActive: true } });
       if (!organisation?.isActive) throw new BadRequestException('Cannot activate an account for an inactive organisation');
