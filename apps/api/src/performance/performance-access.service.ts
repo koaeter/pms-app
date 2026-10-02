@@ -44,7 +44,7 @@ export class PerformanceAccessService {
 
     if (this.isSystemAdmin(user) || (this.isScopedAdmin(user) && plan.employee.organisationId === user.organisationId)) return plan;
     if (plan.employee.userId === user.id) return plan;
-    if (plan.employee.manager?.userId === user.id) return plan;
+    if (plan.supervisor?.userId === user.id) return plan;
     throw new ForbiddenException('You are not authorised to view this performance plan');
   }
 
@@ -54,10 +54,10 @@ export class PerformanceAccessService {
     throw new ForbiddenException('Only performance administrators can manage this performance plan');
   }
 
-  filterVisiblePlans<T extends { employee: { userId: string | null; managerId: string | null; organisationId?: string | null } }>(plans: T[], user: ScopedUser) {
+  filterVisiblePlans<T extends { employee: { userId: string | null; organisationId?: string | null }; supervisorId?: string | null }>(plans: T[], user: ScopedUser) {
     if (this.isSystemAdmin(user)) return plans;
     if (this.isScopedAdmin(user)) return plans.filter((plan) => plan.employee.organisationId === user.organisationId);
-    return plans.filter((plan) => plan.employee.userId === user.id || plan.employee.managerId === user.employeeId);
+    return plans.filter((plan) => plan.employee.userId === user.id || plan.supervisorId === user.employeeId);
   }
 
   private isSystemAdmin(user: ScopedUser) {
