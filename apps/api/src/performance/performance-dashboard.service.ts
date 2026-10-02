@@ -57,6 +57,11 @@ export class PerformanceDashboardService {
     if (!user.employeeId) throw new ForbiddenException('Your account is not linked to an employee record');
     const employee = await this.prisma.employee.findUnique({ where: { id: user.employeeId } });
     if (!employee || employee.userId !== user.id) throw new NotFoundException('Employee record not found');
+    if (employee.organisationId && !user.roles.includes('SYSTEM_ADMIN')) {
+      const organisation = await this.prisma.organisation.findUnique({ where: { id: employee.organisationId }, select: { id: true, isActive: true } });
+      if (!organisation) throw new NotFoundException('Organisation not found');
+      if (!organisation.isActive) throw new ForbiddenException('This organisation is inactive');
+    }
     return employee;
   }
 }
