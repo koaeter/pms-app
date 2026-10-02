@@ -270,7 +270,14 @@ export class OrganisationService {
     if (!data.employeeNumber.trim()) throw new BadRequestException('Employee number is required');
     if (data.departmentId && !(await this.prisma.department.findFirst({ where: { id: data.departmentId, organisationId: data.organisationId } }))) throw new NotFoundException('Department not found in this organisation');
     if (data.designationId && !(await this.prisma.designation.findFirst({ where: { id: data.designationId, organisationId: data.organisationId } }))) throw new NotFoundException('Designation not found in this organisation');
-    if (data.managerId && !(await this.prisma.employee.findFirst({ where: { id: data.managerId, organisationId: data.organisationId } }))) throw new NotFoundException('Manager not found in this organisation');
+    if (data.managerId) {
+      const manager = await this.prisma.employee.findFirst({
+        where: { id: data.managerId, organisationId: data.organisationId },
+        select: { id: true, employmentStatus: true },
+      });
+      if (!manager) throw new NotFoundException('Manager not found in this organisation');
+      if (manager.employmentStatus !== 'ACTIVE') throw new BadRequestException('Only active employees can be assigned as managers');
+    }
     const existing = await this.prisma.employee.findUnique({ where: { userId: data.userId } });
     if (existing && existing.organisationId !== data.organisationId && !user.roles.includes('SYSTEM_ADMIN')) {
       throw new ForbiddenException('Only a system administrator can move an employee between organisations');
@@ -296,10 +303,20 @@ export class OrganisationService {
         currentId = manager.managerId;
       }
     }
-    const result = await this.prisma.employee.upsert({ where: { userId: data.userId }, create: { ...data, employeeNumber: data.employeeNumber.trim() }, update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId } });
-    await this.prisma.user?.update?.({ where: { id: data.userId }, data: { provisioningOrganisationId: null } });
-    if (existing && existing.organisationId !== data.organisationId) {
-      await this.prisma.session?.deleteMany({ where: { userId: data.userId } });
+    const movedOrganisation = Boolean(existing && existing.organisationId !== data.organisationId);
+    const result = await this.prisma.$transaction(async (tx: any) => {
+      const employee = await tx.employee.upsert({
+        where: { userId: data.userId },
+        create: { ...data, employeeNumber: data.employeeNumber.trim() },
+        update: { employeeNumber: data.employeeNumber.trim(), organisationId: data.organisationId, departmentId: data.departmentId, designationId: data.designationId, managerId: data.managerId },
+      });
+      await tx.user.update({ where: { id: data.userId }, data: { provisioningOrganisationId: null } });
+      if (movedOrganisation) {
+        await tx.session.deleteMany({ where: { userId: data.userId } });
+      }
+      return employee;
+    });
+    if (movedOrganisation) {
       await this.audit?.record('EMPLOYEE_ORGANISATION_TRANSFERRED', 'Employee', result.id, user.id, {
         userId: data.userId,
         fromOrganisationId: existing.organisationId,
