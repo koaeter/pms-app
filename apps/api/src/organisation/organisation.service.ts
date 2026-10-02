@@ -151,7 +151,8 @@ export class OrganisationService {
   }
 
   async createEmployeeWithAccount(data: { username: string; password: string; firstName: string; lastName: string; email?: string; employeeNumber: string; organisationId: string; departmentId?: string; designationId?: string; managerId?: string }, user: OrganisationUser) {
-    await this.requireOrganisationAccess(data.organisationId, user);
+    const organisation = await this.requireOrganisationAccess(data.organisationId, user);
+    if (!organisation.isActive) throw new BadRequestException('Cannot provision a login account in an inactive organisation');
     const username = data.username.trim();
     const firstName = data.firstName.trim();
     const lastName = data.lastName.trim();
