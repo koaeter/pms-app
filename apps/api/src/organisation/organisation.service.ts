@@ -307,7 +307,7 @@ export class OrganisationService {
     const organisation = await this.prisma.organisation.findUnique({ where: { id } });
     if (!organisation) throw new NotFoundException('Organisation not found');
     if (user.roles.includes('SYSTEM_ADMIN')) return organisation;
-    if (!organisation.isActive) throw new ForbiddenException('This organisation is inactive');
+    if (organisation.isActive === false) throw new ForbiddenException('This organisation is inactive');
     if (user.organisationId === id) return organisation;
     throw new ForbiddenException('You are not authorised to access this organisation');
   }
