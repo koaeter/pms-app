@@ -95,6 +95,30 @@ test('employee manager assignment cannot create a reporting cycle', async () => 
 });
 
 
+test('employee creation with account cannot create a reporting cycle', async () => {
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    department: { findFirst: async () => null },
+    designation: { findFirst: async () => null },
+    employee: {
+      findFirst: async () => ({ id: 'manager-b', organisationId: 'org-a', employmentStatus: 'ACTIVE' }),
+      findUnique: async ({ where }: any) => {
+        if (where.id === 'manager-b') return { id: 'manager-b', organisationId: 'org-a', managerId: 'manager-c' };
+        if (where.id === 'manager-c') return { id: 'manager-c', organisationId: 'org-a', managerId: 'manager-b' };
+        return null;
+      },
+    },
+  };
+
+  await assert.rejects(
+    () => new OrganisationService(prisma as any).createEmployeeWithAccount(
+      { username: 'new-user', password: 'long-enough-password', firstName: 'New', lastName: 'User', employeeNumber: 'E003', organisationId: 'org-a', managerId: 'manager-b' },
+      { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+    ),
+    (error: any) => error?.response?.message === 'Manager assignment contains an organisational reporting cycle',
+  );
+});
+
 test('department parent assignment cannot create a hierarchy cycle', async () => {
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-a' }) },
