@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma.service';
 import { createPasswordHash } from '../auth/auth.service';
 import { AuditService } from '../audit.service';
+import { EmployeeLifecyclePolicy } from '../lifecycle/employee-lifecycle.policy';
 
 type OrganisationUser = { id: string; organisationId?: string | null; roles: string[] };
 
@@ -199,8 +200,11 @@ export class OrganisationService {
         data: { employmentStatus: status },
       });
       if (result.count !== 1) throw new BadRequestException('Employee status changed before this update could be completed');
-      if (status === 'EXITED' && current.userId) {
+      if (current.userId && !EmployeeLifecyclePolicy.accountShouldBeActive(status)) {
         await tx.user.updateMany({ where: { id: current.userId }, data: { isActive: false } });
+        await tx.session.deleteMany({ where: { userId: current.userId } });
+      } else if (current.userId && EmployeeLifecyclePolicy.accountShouldBeActive(status)) {
+        await tx.user.updateMany({ where: { id: current.userId }, data: { isActive: true } });
         await tx.session.deleteMany({ where: { userId: current.userId } });
       }
       return tx.employee.findUnique({
@@ -208,7 +212,7 @@ export class OrganisationService {
         include: { user: { select: { id: true, username: true, isActive: true } } },
       });
     }, { isolationLevel: 'Serializable' });
-    await this.audit?.record('EMPLOYEE_STATUS_CHANGED', 'Employee', employeeId, user.id, { from: employee.employmentStatus, to: status, loginDisabled: status === 'EXITED' && Boolean(employee.userId) });
+    await this.audit?.record('EMPLOYEE_STATUS_CHANGED', 'Employee', employeeId, user.id, { from: employee.employmentStatus, to: status, loginDisabled: Boolean(employee.userId) && !EmployeeLifecyclePolicy.accountShouldBeActive(status) });
     return updated;
   }
 
