@@ -133,6 +133,70 @@ test('employee creation with account cannot create a reporting cycle', async () 
   );
 });
 
+test('suspending an employee disables the account and revokes sessions', async () => {
+  let userUpdates = 0;
+  let sessionDeletes = 0;
+  const employee = { id: 'employee-a', organisationId: 'org-a', employmentStatus: 'ACTIVE', userId: 'user-a' };
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    employee: {
+      findUnique: async () => employee,
+    },
+    $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      employee: {
+        findUnique: async () => employee,
+        updateMany: async () => ({ count: 1 }),
+      },
+      user: {
+        updateMany: async () => { userUpdates += 1; return { count: 1 }; },
+      },
+      session: {
+        deleteMany: async () => { sessionDeletes += 1; return { count: 2 }; },
+      },
+    }),
+  };
+
+  await new OrganisationService(prisma as any, { record: async () => undefined } as any).updateEmployeeStatus(
+    'employee-a',
+    'SUSPENDED',
+    { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+  );
+
+  assert.equal(userUpdates, 1);
+  assert.equal(sessionDeletes, 1);
+});
+
+test('returning an employee to active status does not reactivate a disabled account', async () => {
+  let userUpdates = 0;
+  const employee = { id: 'employee-a', organisationId: 'org-a', employmentStatus: 'SUSPENDED', userId: 'user-a' };
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    employee: {
+      findUnique: async () => employee,
+    },
+    $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      employee: {
+        findUnique: async () => employee,
+        updateMany: async () => ({ count: 1 }),
+      },
+      user: {
+        updateMany: async () => { userUpdates += 1; return { count: 1 }; },
+      },
+      session: {
+        deleteMany: async () => ({ count: 0 }),
+      },
+    }),
+  };
+
+  await new OrganisationService(prisma as any, { record: async () => undefined } as any).updateEmployeeStatus(
+    'employee-a',
+    'ACTIVE',
+    { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+  );
+
+  assert.equal(userUpdates, 0);
+});
+
 test('department parent assignment cannot create a hierarchy cycle', async () => {
   const prisma = {
     organisation: { findUnique: async () => ({ id: 'org-a' }) },
