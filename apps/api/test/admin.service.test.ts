@@ -350,6 +350,6 @@ test('reactivating a login linked to a non-active employee is rejected', async (
   } as any, { record: async () => undefined } as any);
   await assert.rejects(
     () => admin.setUserStatus({ id: 'admin-a', permissions: ['users.manage'], roles: ['HR_ADMIN'], organisationId: 'org-a' }, 'user-a', true),
-    (error: any) => error?.response?.message === 'Only active employees can have an active login account',
+    (error: any) => error?.response?.message === 'Only active or on-leave employees can have an active login account',
   );
 });
