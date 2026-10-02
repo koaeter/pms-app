@@ -103,6 +103,7 @@ export class PerformanceService {
       where: { cycleId },
       include: {
         employee: { include: { user: { select: { firstName: true, lastName: true } }, department: true, designation: true } },
+        supervisor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         reviewer: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         finalAssessor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         reviewType: true,
@@ -118,6 +119,7 @@ export class PerformanceService {
       where: { id: planId },
       include: {
         employee: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } }, department: true, designation: true, manager: true } },
+        supervisor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         reviewer: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         finalAssessor: { include: { user: { select: { id: true, firstName: true, lastName: true, username: true } } } },
         cycle: { include: { programme: true, reviewType: true, ratingScale: { include: { levels: true } } } },
