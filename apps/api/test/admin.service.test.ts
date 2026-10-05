@@ -295,6 +295,7 @@ test('scoped administrators create accounts pending assignment to their organisa
     user: {
       create: async ({ data }: any) => { createdData = data; return { id: 'user-a', username: data.username, firstName: data.firstName, lastName: data.lastName, email: data.email, isActive: true }; },
     },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
   } as any, { record: async () => undefined } as any);
 
   await admin.createUser(
@@ -338,6 +339,7 @@ test('an unlinked employee can receive a login account', async () => {
   let employeeUpdated = false;
   const admin = new AdminService({
     employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     $transaction: async (fn: any) => fn({
       user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
       employee: { updateMany: async () => { employeeUpdated = true; return { count: 1 }; } },
@@ -356,6 +358,7 @@ test('an unlinked employee can receive a login account', async () => {
 test('an on-leave employee can receive a login account', async () => {
   const admin = new AdminService({
     employee: { findUnique: async () => ({ id: 'employee-leave', userId: null, organisationId: 'org-a', employmentStatus: 'ON_LEAVE', user: null }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     $transaction: async (fn: any) => fn({
       user: { create: async () => ({ id: 'user-leave', username: 'leave-login', firstName: 'Leave', lastName: 'User', email: null, isActive: true }) },
       employee: { updateMany: async () => ({ count: 1 }) },
@@ -375,6 +378,7 @@ test('employee account creation is conditional and does not overwrite a concurre
   let created = false;
   const admin = new AdminService({
     employee: { findUnique: async () => ({ id: 'employee-a', userId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE', user: null }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     $transaction: async (fn: any) => fn({
       user: { create: async () => ({ id: 'user-a', username: 'new-login', firstName: 'New', lastName: 'Login', email: null, isActive: true }) },
       employee: { updateMany: async () => ({ count: 0 }) },
