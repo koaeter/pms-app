@@ -227,6 +227,7 @@ export class OrganisationService {
         const reports = await tx.employee.findMany({
           where: { managerId: employeeId, organisationId: current.organisationId },
           select: {
+            id: true,
             employeeNumber: true,
             user: { select: { firstName: true, lastName: true } },
           },
@@ -234,39 +235,14 @@ export class OrganisationService {
         });
 
         if (reports.length > 0) {
-          const administrators = await tx.user.findMany({
-            where: {
-              isActive: true,
-              roles: { some: { role: { name: { in: ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'] } } } },
-              OR: [
-                { employee: { organisationId: current.organisationId } },
-                { roles: { some: { role: { name: 'SYSTEM_ADMIN' } } } },
-              ],
-            },
-            select: { id: true },
-          });
-
-          const employeeName = current.user
-            ? [current.user.firstName, current.user.lastName].filter(Boolean).join(' ')
-            : current.employeeNumber;
-          const reportSummary = reports
-            .map((report: any) => {
-              const name = report.user
-                ? [report.user.firstName, report.user.lastName].filter(Boolean).join(' ')
-                : report.employeeNumber;
-              return name || report.employeeNumber;
-            })
-            .join(', ');
-
-          if (administrators.length > 0) {
-            await tx.notification.createMany({
-              data: administrators.map((administrator: { id: string }) => ({
-                userId: administrator.id,
-                title: 'Reporting relationship requires review',
-                message: employeeName + ' is now ' + status.toLowerCase() + ' and still has ' + reports.length + ' direct report' + (reports.length === 1 ? '' : 's') + ' assigned. Existing manager assignments were preserved; review and reassign the affected reporting relationships if required. Affected employees: ' + reportSummary + '.',
-                link: '/admin/organisation',
-              })),
+          const successor = await this.findNextEligibleSupervisor(tx, current.managerId, current.organisationId, employeeId);
+          if (successor) {
+            await tx.employee.updateMany({
+              where: { id: { in: reports.map((report: { id: string }) => report.id) }, managerId: employeeId },
+              data: { managerId: successor.id },
             });
+          } else {
+            await this.notifyReportingRelationshipReview(tx, current, reports, status);
           }
         }
       }
@@ -367,7 +343,28 @@ export class OrganisationService {
       }
     }
     const movedOrganisation = Boolean(existing && existing.organisationId !== data.organisationId);
+    let transferredReports: Array<{ id: string; employeeNumber: string }>= [];
+    let transferredReportsSuccessorId: string | null = null;
     const result = await this.prisma.$transaction(async (tx: any) => {
+      if (movedOrganisation && existing?.organisationId) {
+        const reports = await tx.employee.findMany({
+          where: { managerId: existing.id, organisationId: existing.organisationId },
+          select: { id: true, employeeNumber: true },
+          orderBy: { employeeNumber: 'asc' },
+        });
+        if (reports.length > 0) {
+          const successor = await this.findNextEligibleSupervisor(tx, existing.managerId, existing.organisationId, existing.id);
+          if (successor) {
+            await tx.employee.updateMany({
+              where: { id: { in: reports.map((report: { id: string }) => report.id) }, managerId: existing.id },
+              data: { managerId: successor.id },
+            });
+            transferredReportsSuccessorId = successor.id;
+          }
+          transferredReports = reports;
+        }
+      }
+
       const employee = await tx.employee.upsert({
         where: { userId: data.userId },
         create: { ...data, employeeNumber: data.employeeNumber.trim() },
@@ -376,6 +373,9 @@ export class OrganisationService {
       await tx.user.update({ where: { id: data.userId }, data: { provisioningOrganisationId: null } });
       if (movedOrganisation) {
         await tx.session.deleteMany({ where: { userId: data.userId } });
+        if (transferredReports.length > 0 && !transferredReportsSuccessorId) {
+          await this.notifyReportingRelationshipReview(tx, existing, transferredReports, 'TRANSFERRED');
+        }
       }
       return employee;
     });
@@ -384,6 +384,8 @@ export class OrganisationService {
         userId: data.userId,
         fromOrganisationId: existing.organisationId,
         toOrganisationId: data.organisationId,
+        reassignedDirectReportCount: transferredReports.length,
+        reassignedDirectReportsToEmployeeId: transferredReportsSuccessorId,
       });
     } else if (!existing) {
       await this.audit?.record('EMPLOYEE_CREATED', 'Employee', result.id, user.id, {
@@ -393,6 +395,64 @@ export class OrganisationService {
       });
     }
     return result;
+  }
+
+  private async findNextEligibleSupervisor(tx: any, managerId: string | null, organisationId: string, excludedEmployeeId: string) {
+    const visited = new Set<string>();
+    let currentId = managerId;
+    while (currentId) {
+      if (currentId === excludedEmployeeId || visited.has(currentId)) return null;
+      visited.add(currentId);
+      const candidate = await tx.employee.findUnique({
+        where: { id: currentId },
+        select: { id: true, managerId: true, organisationId: true, employmentStatus: true },
+      });
+      if (!candidate || candidate.organisationId !== organisationId) return null;
+      if (candidate.employmentStatus === 'ACTIVE') return candidate;
+      currentId = candidate.managerId;
+    }
+    return null;
+  }
+
+  private async notifyReportingRelationshipReview(tx: any, employee: any, reports: Array<any>, reason: string) {
+    const organisationId = employee.organisationId;
+    if (!organisationId || reports.length === 0) return;
+    const administrators = await tx.user.findMany({
+      where: {
+        isActive: true,
+        roles: { some: { role: { name: { in: ['SYSTEM_ADMIN', 'HR_ADMIN', 'PERFORMANCE_ADMIN'] } } } },
+        OR: [
+          { employee: { organisationId } },
+          { roles: { some: { role: { name: 'SYSTEM_ADMIN' } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (administrators.length === 0) return;
+
+    const employeeName = employee.user
+      ? [employee.user.firstName, employee.user.lastName].filter(Boolean).join(' ')
+      : employee.employeeNumber;
+    const reportSummary = reports
+      .map((report: any) => {
+        const name = report.user
+          ? [report.user.firstName, report.user.lastName].filter(Boolean).join(' ')
+          : report.employeeNumber;
+        return name || report.employeeNumber;
+      })
+      .join(', ');
+    const reasonText = reason === 'TRANSFERRED'
+      ? 'was transferred to another organisation'
+      : 'is now ' + reason.toLowerCase();
+
+    await tx.notification.createMany({
+      data: administrators.map((administrator: { id: string }) => ({
+        userId: administrator.id,
+        title: 'Reporting relationship requires review',
+        message: employeeName + ' ' + reasonText + ' and had ' + reports.length + ' direct report' + (reports.length === 1 ? '' : 's') + ' with no active supervisor available in the previous reporting chain. The affected employees are currently without a manager and require administrative review. Affected employees: ' + reportSummary + '.',
+        link: '/admin/organisation',
+      })),
+    });
   }
 
   private async requireOrganisationAccess(id: string, user: OrganisationUser) {
