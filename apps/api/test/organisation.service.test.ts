@@ -20,7 +20,10 @@ function basePrisma(existingOrganisationId: string | null) {
     session: { deleteMany: async () => ({ count: 1 }) },
     notification: { createMany: async ({ data }: any) => ({ count: data.length }) },
     $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
-      employee: { upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId, employeeNumber: update.employeeNumber }) },
+      employee: {
+        findMany: async () => [],
+        upsert: async ({ update }: any) => ({ id: 'employee-a', organisationId: update.organisationId, employeeNumber: update.employeeNumber }),
+      },
       user: { update: async () => ({ id: 'user-a' }) },
       session: { deleteMany: async () => ({ count: 1 }) },
     }),
@@ -248,6 +251,93 @@ test('inactive organisation denies scoped access', async () => {
   );
 });
 
+
+test('suspending a manager reassigns direct reports to the next active supervisor', async () => {
+  let reassignedManagerId = '';
+  const employee = {
+    id: 'manager-b',
+    organisationId: 'org-a',
+    employmentStatus: 'ACTIVE',
+    userId: 'user-b',
+    employeeNumber: 'M002',
+    managerId: 'manager-a',
+    user: { firstName: 'Manager', lastName: 'Two' },
+  };
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
+    employee: { findUnique: async () => employee },
+    $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      employee: {
+        findUnique: async ({ where }: any) => {
+          if (where.id === 'manager-a') return { id: 'manager-a', managerId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE' };
+          return employee;
+        },
+        updateMany: async ({ data }: any) => {
+          reassignedManagerId = data.managerId;
+          return { count: 2 };
+        },
+        findMany: async () => [
+          { id: 'report-1', employeeNumber: 'E001', user: { firstName: 'Report', lastName: 'One' } },
+          { id: 'report-2', employeeNumber: 'E002', user: { firstName: 'Report', lastName: 'Two' } },
+        ],
+      },
+      user: { updateMany: async () => ({ count: 1 }) },
+      session: { deleteMany: async () => ({ count: 2 }) },
+    }),
+  };
+
+  await new OrganisationService(prisma as any, { record: async () => undefined } as any).updateEmployeeStatus(
+    'manager-b',
+    'SUSPENDED',
+    { id: 'admin-a', organisationId: 'org-a', roles: ['HR_ADMIN'] },
+  );
+
+  assert.equal(reassignedManagerId, 'manager-a');
+});
+
+test('transferring a manager reassigns old-organisation direct reports to the next active supervisor', async () => {
+  let reassignedManagerId = '';
+  const existing = {
+    id: 'manager-b',
+    organisationId: 'org-a',
+    employmentStatus: 'ACTIVE',
+    userId: 'user-a',
+    managerId: 'manager-a',
+  };
+  const prisma = {
+    organisation: { findUnique: async () => ({ id: 'org-b', isActive: true }) },
+    user: { findUnique: async () => ({ id: 'user-a' }) },
+    department: { findFirst: async () => null },
+    designation: { findFirst: async () => null },
+    employee: {
+      findUnique: async ({ where }: any) => {
+        if (where.userId === 'user-a') return existing;
+        if (where.id === 'manager-a') return { id: 'manager-a', managerId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE' };
+        return null;
+      },
+      findFirst: async () => null,
+      findMany: async () => [{ id: 'report-1', employeeNumber: 'E001' }],
+    },
+    performancePlan: { count: async () => 0 },
+    $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      employee: {
+        findMany: async () => [{ id: 'report-1', employeeNumber: 'E001' }],
+        updateMany: async ({ data }: any) => { reassignedManagerId = data.managerId; return { count: 1 }; },
+        upsert: async ({ update }: any) => ({ id: 'manager-b', organisationId: update.organisationId, employeeNumber: update.employeeNumber }),
+      },
+      user: { update: async () => ({ id: 'user-a' }) },
+      session: { deleteMany: async () => ({ count: 1 }) },
+    }),
+  };
+
+  const result = await new OrganisationService(prisma as any, { record: async () => undefined } as any).assignEmployee(
+    { userId: 'user-a', employeeNumber: 'E001', organisationId: 'org-b' },
+    { id: 'root', organisationId: null, roles: ['SYSTEM_ADMIN'] },
+  );
+
+  assert.equal(result.organisationId, 'org-b');
+  assert.equal(reassignedManagerId, 'manager-a');
+});
 
 test('suspending a manager preserves direct reports and notifies active organisation administrators', async () => {
   let notificationCreates = 0;
