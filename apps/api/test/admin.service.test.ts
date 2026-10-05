@@ -14,6 +14,7 @@ function service() {
       update: async ({ where, data }: any) => ({ id: where.id, username: 'user', isActive: data.isActive }),
     },
     role: { findUnique: async () => ({ id: 'role-1', name: 'EMPLOYEE' }) },
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: true }) },
     userRole: {
       count: async () => 0,
       create: async ({ data }: any) => data,
