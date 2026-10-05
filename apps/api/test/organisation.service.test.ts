@@ -270,7 +270,8 @@ test('suspending a manager reassigns direct reports to the next active superviso
       employee: {
         findUnique: async ({ where }: any) => {
           if (where.id === 'manager-a') return { id: 'manager-a', managerId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE' };
-          return employee;
+          if (where.id === 'manager-b') return employee;
+          return null;
         },
         updateMany: async ({ data }: any) => {
           reassignedManagerId = data.managerId;
