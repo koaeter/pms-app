@@ -147,6 +147,7 @@ test('suspending an employee disables the account and revokes sessions', async (
     $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
       employee: {
         findUnique: async () => employee,
+        findMany: async () => [],
         updateMany: async () => ({ count: 1 }),
       },
       user: {
