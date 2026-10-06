@@ -43,6 +43,7 @@ export class PerformanceAccessService {
       include: { employee: { include: { user: true, manager: true } }, supervisor: { include: { user: true } } },
     });
     if (!plan) throw new NotFoundException('Performance plan not found');
+    await this.requireOrganisationAccess(plan.employee.organisationId ?? '', user);
 
     if (this.isSystemAdmin(user) || (this.isScopedAdmin(user) && plan.employee.organisationId === user.organisationId)) return plan;
     if (plan.employee.userId === user.id) return plan;
