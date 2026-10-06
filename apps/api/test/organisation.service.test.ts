@@ -274,8 +274,9 @@ test('suspending a manager reassigns direct reports to the next active superviso
           return null;
         },
         updateMany: async ({ data }: any) => {
-          reassignedManagerId = data.managerId;
-          return { count: 2 };
+          if (data.managerId) reassignedManagerId = data.managerId;
+          if (data.employmentStatus) employee.employmentStatus = data.employmentStatus;
+          return { count: data.managerId ? 2 : 1 };
         },
         findMany: async () => [
           { id: 'report-1', employeeNumber: 'E001', user: { firstName: 'Report', lastName: 'One' } },
@@ -322,6 +323,10 @@ test('transferring a manager reassigns old-organisation direct reports to the ne
     performancePlan: { count: async () => 0 },
     $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
       employee: {
+        findUnique: async ({ where }: any) => {
+          if (where.id === 'manager-a') return { id: 'manager-a', managerId: null, organisationId: 'org-a', employmentStatus: 'ACTIVE' };
+          return null;
+        },
         findMany: async () => [{ id: 'report-1', employeeNumber: 'E001' }],
         updateMany: async ({ data }: any) => { reassignedManagerId = data.managerId; return { count: 1 }; },
         upsert: async ({ update }: any) => ({ id: 'manager-b', organisationId: update.organisationId, employeeNumber: update.employeeNumber }),
