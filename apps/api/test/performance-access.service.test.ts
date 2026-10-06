@@ -135,3 +135,31 @@ test('plan read access follows the historical supervisor snapshot, not the curre
     /not authorised/,
   );
 });
+
+test('scoped administrators cannot access an inactive organisation', async () => {
+  const inactiveService = new PerformanceAccessService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+
+  await assert.rejects(
+    () => inactiveService.requireOrganisationAccess('org-a', {
+      id: 'admin-user',
+      organisationId: 'org-a',
+      roles: ['PERFORMANCE_ADMIN'],
+    }),
+    (error: any) => error?.response?.message === 'This organisation is inactive',
+  );
+});
+
+test('system administrators can access an inactive organisation for recovery', async () => {
+  const inactiveService = new PerformanceAccessService({
+    organisation: { findUnique: async () => ({ id: 'org-a', isActive: false }) },
+  } as any);
+
+  const result = await inactiveService.requireOrganisationAccess('org-a', {
+    id: 'sys-user',
+    organisationId: null,
+    roles: ['SYSTEM_ADMIN'],
+  });
+  assert.equal(result.isActive, false);
+});
