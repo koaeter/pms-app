@@ -10,7 +10,9 @@ export class PerformanceAccessService {
   async requireOrganisationAccess(organisationId: string, user: ScopedUser) {
     const organisation = await this.prisma.organisation.findUnique({ where: { id: organisationId } });
     if (!organisation) throw new NotFoundException('Organisation not found');
-    if (user.roles.includes('SYSTEM_ADMIN') || user.organisationId === organisationId) return organisation;
+    if (user.roles.includes('SYSTEM_ADMIN')) return organisation;
+    if (organisation.isActive === false) throw new ForbiddenException('This organisation is inactive');
+    if (user.organisationId === organisationId) return organisation;
     throw new ForbiddenException('You are not authorised to access this organisation');
   }
 
