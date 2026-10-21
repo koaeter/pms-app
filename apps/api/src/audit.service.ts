@@ -12,12 +12,14 @@ export class AuditService {
     entityId: string | null,
     actorId: string | null,
     metadata?: Prisma.InputJsonValue,
+    transaction?: Prisma.TransactionClient,
   ) {
+    const client = transaction ?? this.prisma;
     const actor = actorId
-      ? await this.prisma.user.findUnique({ where: { id: actorId }, select: { employee: { select: { organisationId: true } } } })
+      ? await client.user.findUnique({ where: { id: actorId }, select: { employee: { select: { organisationId: true } } } })
       : null;
     const organisationId = actor?.employee?.organisationId ?? null;
-    return this.prisma.auditLog.create({
+    return client.auditLog.create({
       data: { action, entity, entityId, actorId, organisationId, metadata },
     });
   }
