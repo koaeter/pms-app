@@ -170,7 +170,7 @@ export class PerformanceController {
   private async prismaAdminRecipients(organisationId: string | null) {
     if (!organisationId) return [];
     const employees = await this.prisma.employee.findMany({
-      where: { organisationId, userId: { not: null }, user: { isActive: true } },
+      where: { organisationId, employmentStatus: 'ACTIVE', userId: { not: null }, user: { isActive: true } },
       include: { user: { include: { roles: { include: { role: true } } } } },
     });
     return employees.flatMap(({ user }) =>
