@@ -75,8 +75,14 @@ export class AuthService {
     const roles = session?.user.roles.map((entry: any) => entry.role.name) ?? [];
     const organisation = session?.user.employee?.organisation ?? session?.user.provisioningOrganisation ?? null;
     if (!session || session.expiresAt <= new Date() || !session.user.isActive || (session.user.employee && !EmployeeLifecyclePolicy.isLoginEligible(session.user.employee.employmentStatus)) || (!roles.includes('SYSTEM_ADMIN') && organisation && !organisation.isActive)) {
-      // Eagerly remove any session that fails a runtime lifecycle or expiry check.
-      if (session) await this.prisma.session.deleteMany({ where: { tokenHash } });
+      // Eagerly remove the presented session on any runtime failure. If the
+      // organisation is inactive, revoke all of that user's sessions as well.
+      if (session) {
+        await this.prisma.session.deleteMany({ where: { tokenHash } });
+        if (organisation && !organisation.isActive && !roles.includes('SYSTEM_ADMIN')) {
+          await this.prisma.session.deleteMany({ where: { userId: session.user.id } });
+        }
+      }
       throw new UnauthorizedException('Session expired or invalid');
     }
     return this.presentUser(session.user);
