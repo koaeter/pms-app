@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { OutboxService } from './outbox.service';
+import { PrismaService } from '../prisma.service';
 
 @Module({
-  providers: [OutboxService],
+  providers: [OutboxService, PrismaService],
   exports: [OutboxService],
 })
 export class OutboxModule {}
