@@ -88,3 +88,24 @@ test('inactive organisation invalidates an existing session', async () => {
   await assert.rejects(() => service.currentUser('token'), /Session expired or invalid/);
   assert.equal(revoked, true);
 });
+
+
+test('invalid employment lifecycle revokes the presented session', async () => {
+  let revokedTokenHash = '';
+  const service = new AuthService({
+    session: {
+      findUnique: async () => ({
+        expiresAt: new Date(Date.now() + 60_000),
+        user: {
+          id: 'user-a', isActive: true,
+          employee: { employmentStatus: 'SUSPENDED', organisation: { id: 'org-a', isActive: true } },
+          provisioningOrganisation: null,
+          roles: [{ role: { name: 'EMPLOYEE', permissions: [] } }],
+        },
+      }),
+      deleteMany: async ({ where }: any) => { revokedTokenHash = where.tokenHash; return { count: 1 }; },
+    },
+  } as any);
+  await assert.rejects(() => service.currentUser('presented-token'), /Session expired or invalid/);
+  assert.equal(revokedTokenHash.length, 64);
+});
