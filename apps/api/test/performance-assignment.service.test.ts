@@ -41,8 +41,10 @@ function service(planOverrides: Record<string, unknown> = {}, candidates: unknow
     employee: {
       findMany: async () => candidates,
       findUnique: async ({ where }: { where: { userId: string } }) => {
-        if (where.userId === 'reviewer-user') return employee('reviewer-1');
-        if (where.userId === 'other-user') return employee('other-1');
+        if (where.userId === 'reviewer-user') return { ...employee('reviewer-1'), employmentStatus: 'ACTIVE' };
+        if (where.userId === 'other-user') return { ...employee('other-1'), employmentStatus: 'ACTIVE' };
+        if (where.userId === 'suspended-user') return { ...employee('suspended-1'), employmentStatus: 'SUSPENDED' };
+        if (where.userId === 'inactive-user') return { ...employee('inactive-1'), employmentStatus: 'ACTIVE', user: { isActive: false } };
         return null;
       },
     },
@@ -125,5 +127,20 @@ test('final assessor cannot be changed after final assessment submission', async
       assessments: [{ assessorType: 'FINAL', status: 'APPROVED' }],
     }, [employee('reviewer-2')]).assignAssessors('plan-1', { finalAssessorId: 'reviewer-2' }, admin),
     (error: unknown) => error instanceof BadRequestException && /final assessor cannot be changed after/i.test((error as Error).message),
+  );
+});
+
+
+test('suspended employee cannot act as assigned reviewer', async () => {
+  await assert.rejects(
+    () => service({ reviewerId: 'suspended-1' }).assertAssigned('plan-1', 'REVIEWER', 'suspended-user'),
+    (error: unknown) => error instanceof ForbiddenException && /Only active employees/.test((error as Error).message),
+  );
+});
+
+test('inactive account cannot act as assigned reviewer', async () => {
+  await assert.rejects(
+    () => service({ reviewerId: 'inactive-1' }).assertAssigned('plan-1', 'REVIEWER', 'inactive-user'),
+    (error: unknown) => error instanceof ForbiddenException && /Only active employees/.test((error as Error).message),
   );
 });
