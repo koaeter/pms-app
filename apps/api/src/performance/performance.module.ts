@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from '../audit.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { OutboxModule } from '../outbox/outbox.module';
 import { PrismaService } from '../prisma.service';
 import { PerformanceController } from './performance.controller';
 import { PerformanceService } from './performance.service';
@@ -13,7 +14,7 @@ import { AssessmentWorkflowService } from './assessment-workflow.service';
 import { PerformanceAssignmentService } from './performance-assignment.service';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, OutboxModule],
   controllers: [PerformanceController, CycleWorkflowController, PerformanceDashboardController],
   providers: [PerformanceService, PerformanceAccessService, CycleWorkflowService, PerformanceDashboardService, AssessmentWorkflowService, PerformanceAssignmentService, AuditService, PrismaService],
 })
