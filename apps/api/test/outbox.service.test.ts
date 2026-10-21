@@ -60,8 +60,8 @@ test('claimBatch uses a bounded transactional PostgreSQL claim query', async () 
 
   assert.equal(transactionCalled, true);
   assert.equal(result.length, 1);
-  assert.equal(query.sql.join('').includes('FOR UPDATE SKIP LOCKED'), true);
-  assert.equal(query.sql.join('').includes('RETURNING event.*'), true);
+  assert.equal(String(query.sql).includes('FOR UPDATE SKIP LOCKED'), true);
+  assert.equal(String(query.sql).includes('RETURNING event.*'), true);
   assert.deepEqual(query.values, [10, 100]);
 });
 
