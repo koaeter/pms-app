@@ -158,12 +158,12 @@ export class PerformanceController {
       recipients = await this.prismaAdminRecipients(plan.cycle.organisationId);
     }
     const uniqueRecipients = [...new Set(recipients.filter((userId) => userId !== request.user.id))];
-    await Promise.all(uniqueRecipients.map((userId) => this.notifications.notify(
-      userId,
+    await this.notifications.notifyMany(
+      uniqueRecipients,
       body.assessorType === 'FINAL' ? 'Performance assessment ready for approval' : 'Performance assessment submitted',
       `${body.assessorType} assessment for ${plan.employee.user?.firstName ?? 'Employee'} ${plan.employee.user?.lastName ?? ''} has been submitted.`,
       `/performance/${planId}`,
-    )));
+    );
     return result;
   }
 
