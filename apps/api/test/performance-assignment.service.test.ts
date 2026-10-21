@@ -25,6 +25,8 @@ function employee(id: string, organisationId = 'org-a', overrides: Record<string
 function service(planOverrides: Record<string, unknown> = {}, candidates: unknown[] = []) {
   const plan = {
     id: 'plan-1',
+    status: 'IN_REVIEW',
+    cycle: { status: 'OPEN' },
     employeeId: 'employee-1',
     reviewerId: null,
     finalAssessorId: null,
@@ -142,5 +144,27 @@ test('inactive account cannot act as assigned reviewer', async () => {
   await assert.rejects(
     () => service({ reviewerId: 'inactive-1' }).assertAssigned('plan-1', 'REVIEWER', 'inactive-user'),
     (error: unknown) => error instanceof ForbiddenException && /Only active employees/.test((error as Error).message),
+  );
+});
+
+
+test('assessor assignment is frozen after plan approval', async () => {
+  await assert.rejects(
+    () => service({ status: 'APPROVED' }, [employee('reviewer-1')]).assignAssessors('plan-1', { reviewerId: 'reviewer-1' }, admin),
+    (error: unknown) => error instanceof BadRequestException && /after a performance plan has been approved or locked/i.test((error as Error).message),
+  );
+});
+
+test('assessor assignment is frozen after plan locking', async () => {
+  await assert.rejects(
+    () => service({ status: 'LOCKED' }, [employee('reviewer-1')]).assignAssessors('plan-1', { reviewerId: 'reviewer-1' }, admin),
+    (error: unknown) => error instanceof BadRequestException && /after a performance plan has been approved or locked/i.test((error as Error).message),
+  );
+});
+
+test('assessor assignment is frozen after the performance cycle closes', async () => {
+  await assert.rejects(
+    () => service({ cycle: { status: 'CLOSED' } }, [employee('reviewer-1')]).assignAssessors('plan-1', { reviewerId: 'reviewer-1' }, admin),
+    (error: unknown) => error instanceof BadRequestException && /after the performance cycle is closed/i.test((error as Error).message),
   );
 });
