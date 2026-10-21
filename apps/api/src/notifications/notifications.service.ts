@@ -24,4 +24,13 @@ export class NotificationsService {
   async notify(userId: string, title: string, message: string, link?: string) {
     return this.prisma.notification.create({ data: { userId, title, message, link } });
   }
+
+  async notifyMany(userIds: string[], title: string, message: string, link?: string) {
+    const uniqueUserIds = [...new Set(userIds)];
+    if (uniqueUserIds.length === 0) return { count: 0 };
+
+    return this.prisma.notification.createMany({
+      data: uniqueUserIds.map((userId) => ({ userId, title, message, link })),
+    });
+  }
 }
