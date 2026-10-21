@@ -28,13 +28,13 @@ function makeService(cycle: any, options: { programmeActive?: boolean; scaleOrg?
     },
   } as any;
   prisma.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prisma);
-  return new CycleWorkflowService(prisma);
+  return new CycleWorkflowService(prisma, { record: async () => ({}) } as any, { enqueue: async () => ({ count: 1 }) } as any);
 }
 
 test('cycle cannot open without a rating scale', async () => {
   const cycle = { id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: null, status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31') };
   await assert.rejects(
-    () => makeService(cycle).updateStatus('cycle-1', 'OPEN'),
+    () => makeService(cycle).updateStatus('cycle-1', 'OPEN', 'actor-1'),
     (error: unknown) => error instanceof BadRequestException && /rating scale must be configured/i.test(error.message),
   );
 });
@@ -42,7 +42,7 @@ test('cycle cannot open without a rating scale', async () => {
 test('cycle cannot open with a rating scale from another organisation', async () => {
   const cycle = { id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: 'scale-1', status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31') };
   await assert.rejects(
-    () => makeService(cycle, { scaleOrg: 'org-b' }).updateStatus('cycle-1', 'OPEN'),
+    () => makeService(cycle, { scaleOrg: 'org-b' }).updateStatus('cycle-1', 'OPEN', 'actor-1'),
     /rating scale must belong to the cycle organisation/i,
   );
 });
@@ -50,14 +50,14 @@ test('cycle cannot open with a rating scale from another organisation', async ()
 test('cycle cannot open with an empty rating scale', async () => {
   const cycle = { id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: 'scale-1', status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31') };
   await assert.rejects(
-    () => makeService(cycle, { levelCount: 0 }).updateStatus('cycle-1', 'OPEN'),
+    () => makeService(cycle, { levelCount: 0 }).updateStatus('cycle-1', 'OPEN', 'actor-1'),
     /must contain at least one rating level/i,
   );
 });
 
 test('cycle with a valid rating scale can open', async () => {
   const cycle = { id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: 'scale-1', status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31') };
-  const result = await makeService(cycle).updateStatus('cycle-1', 'OPEN');
+  const result = await makeService(cycle).updateStatus('cycle-1', 'OPEN', 'actor-1');
   assert.equal(result.status, 'OPEN');
 });
 
@@ -74,9 +74,57 @@ test('cycle transition rejects a concurrent state change', async () => {
     ratingLevel: { count: async () => 1 },
   } as any;
   prisma.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prisma);
-  const service = new CycleWorkflowService(prisma);
+  const service = new CycleWorkflowService(prisma, { record: async () => ({}) } as any, { enqueue: async () => ({ count: 1 }) } as any);
   await assert.rejects(
-    () => service.updateStatus('cycle-1', 'OPEN'),
+    () => service.updateStatus('cycle-1', 'OPEN', 'actor-1'),
     /changed before this transition could be applied/i,
   );
+});
+
+
+test('cycle transition writes audit and outbox through the same transaction client', async () => {
+  const cycle = {
+    id: 'cycle-1', organisationId: 'org-a', programmeId: 'programme-1', ratingScaleId: 'scale-1',
+    status: 'DRAFT', startsAt: new Date('2026-01-01'), endsAt: new Date('2026-12-31'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+  };
+  let auditTransaction: any;
+  let outboxTransaction: any;
+  let auditArgs: any;
+  let outboxArgs: any;
+  let currentCycle = { ...cycle };
+  const tx = {
+    performanceCycle: {
+      findUnique: async () => currentCycle,
+      updateMany: async ({ where, data }: any) => {
+        if (where.status !== currentCycle.status) return { count: 0 };
+        currentCycle = { ...currentCycle, ...data, updatedAt: new Date('2026-01-03T00:00:00.000Z') };
+        return { count: 1 };
+      },
+    },
+    performanceProgramme: { findUnique: async () => ({ isActive: true }) },
+    ratingScale: { findUnique: async () => ({ id: 'scale-1', organisationId: 'org-a' }) },
+    ratingLevel: { count: async () => 1 },
+  };
+  const prisma = { $transaction: async (callback: (client: any) => Promise<unknown>) => callback(tx) } as any;
+  const service = new CycleWorkflowService(
+    prisma,
+    { record: async (...args: any[]) => { auditArgs = args; auditTransaction = args[5]; } } as any,
+    { enqueue: async (...args: any[]) => { outboxArgs = args; outboxTransaction = args[3]; return { count: 1 }; } } as any,
+  );
+
+  const result = await service.updateStatus('cycle-1', 'OPEN', 'actor-1');
+
+  assert.equal(result.status, 'OPEN');
+  assert.equal(auditTransaction, tx);
+  assert.equal(outboxTransaction, tx);
+  assert.deepEqual(auditArgs.slice(0, 5), [
+    'PERFORMANCE_CYCLE_STATUS_CHANGED', 'PerformanceCycle', 'cycle-1', 'actor-1',
+    { previousStatus: 'DRAFT', status: 'OPEN' },
+  ]);
+  assert.equal(outboxArgs[1], 'performance.cycle.status_changed');
+  assert.deepEqual(outboxArgs[2], {
+    cycleId: 'cycle-1', organisationId: 'org-a', actorId: 'actor-1',
+    previousStatus: 'DRAFT', status: 'OPEN',
+  });
 });
