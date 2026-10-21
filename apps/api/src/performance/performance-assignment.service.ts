@@ -117,8 +117,14 @@ export class PerformanceAssignmentService {
     });
     if (!plan) throw new NotFoundException('Performance plan not found');
 
-    const employee = await this.prisma.employee.findUnique({ where: { userId } });
+    const employee = await this.prisma.employee.findUnique({
+      where: { userId },
+      include: { user: { select: { isActive: true } } },
+    });
     if (!employee) throw new ForbiddenException('Authenticated user is not linked to an employee record');
+    if (!employee.user?.isActive || !EmployeeLifecyclePolicy.canAssessPerformance(employee.employmentStatus)) {
+      throw new ForbiddenException('Only active employees with active user accounts can complete performance assessments');
+    }
 
     const assignedId = assessorType === 'REVIEWER' ? plan.reviewerId : plan.finalAssessorId;
     if (!assignedId) {
