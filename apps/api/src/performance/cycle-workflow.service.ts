@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { AuditService } from '../audit.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma.service';
 
 const transitions: Record<string, string[]> = {
@@ -10,9 +12,13 @@ const transitions: Record<string, string[]> = {
 
 @Injectable()
 export class CycleWorkflowService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly outbox: OutboxService,
+  ) {}
 
-  async updateStatus(cycleId: string, status: 'DRAFT' | 'OPEN' | 'REVIEW' | 'CLOSED') {
+  async updateStatus(cycleId: string, status: 'DRAFT' | 'OPEN' | 'REVIEW' | 'CLOSED', actorId: string) {
     return this.prisma.$transaction(async (tx: any) => {
       // Re-read the cycle inside the transaction so validation and the state change
       // operate on the same database snapshot.
@@ -54,7 +60,32 @@ export class CycleWorkflowService {
         throw new BadRequestException('The performance cycle changed before this transition could be applied');
       }
 
-      return tx.performanceCycle.findUnique({ where: { id: cycleId } });
+      const updatedCycle = await tx.performanceCycle.findUnique({ where: { id: cycleId } });
+      // Keep audit history and the durable event in the same transaction as the
+      // business transition. If either write fails, the transition rolls back.
+      await this.audit.record(
+        'PERFORMANCE_CYCLE_STATUS_CHANGED',
+        'PerformanceCycle',
+        cycleId,
+        actorId,
+        { previousStatus: cycle.status, status },
+        tx,
+      );
+      const version = cycle.updatedAt instanceof Date ? cycle.updatedAt.toISOString() : String(cycle.updatedAt ?? cycle.status);
+      await this.outbox.enqueue(
+        `cycle-status:${cycleId}:${version}:${cycle.status}->${status}`,
+        'performance.cycle.status_changed',
+        {
+          cycleId,
+          organisationId: cycle.organisationId,
+          actorId,
+          previousStatus: cycle.status,
+          status,
+        },
+        tx,
+      );
+
+      return updatedCycle;
     });
   }
 }
