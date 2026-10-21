@@ -120,8 +120,8 @@ export class PerformanceController {
     await this.access.requirePlanManagement(planId, request.user);
     const result = await this.assignments.assignAssessors(planId, body, request.user);
     await this.audit.record('PERFORMANCE_ASSESSORS_ASSIGNED', 'PerformancePlan', planId, request.user.id, {
-      reviewerId: body.reviewerId ?? null,
-      finalAssessorId: body.finalAssessorId ?? null,
+      reviewerId: result.reviewerId ?? null,
+      finalAssessorId: result.finalAssessorId ?? null,
     });
     return result;
   }
