@@ -50,10 +50,16 @@ export class PerformanceAssignmentService {
 
     const plan = await this.prisma.performancePlan.findUnique({
       where: { id: planId },
-      include: { employee: true, reviewer: true, finalAssessor: true, assessments: { select: { assessorType: true, status: true } } },
+      include: { employee: true, reviewer: true, finalAssessor: true, cycle: true, assessments: { select: { assessorType: true, status: true } } },
     });
     if (!plan) throw new NotFoundException('Performance plan not found');
     if (!plan.employee.organisationId) throw new BadRequestException('Performance plan employee has no organisation');
+    if (plan.status === 'APPROVED' || plan.status === 'LOCKED') {
+      throw new BadRequestException('Assessors cannot be reassigned after a performance plan has been approved or locked');
+    }
+    if (plan.cycle.status === 'CLOSED') {
+      throw new BadRequestException('Assessors cannot be reassigned after the performance cycle is closed');
+    }
 
     const reviewerId = data.reviewerId === undefined ? plan.reviewerId : data.reviewerId;
     const finalAssessorId = data.finalAssessorId === undefined ? plan.finalAssessorId : data.finalAssessorId;
