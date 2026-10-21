@@ -35,10 +35,11 @@ function service(planOverrides: Record<string, unknown> = {}, candidates: unknow
     ...planOverrides,
   };
 
-  const prisma = {
+  const prisma: any = {
     performancePlan: {
       findUnique: async () => plan,
       update: async ({ data }: { data: Record<string, unknown> }) => ({ ...plan, ...data }),
+      updateMany: async () => ({ count: 1 }),
     },
     employee: {
       findMany: async () => candidates,
@@ -50,7 +51,11 @@ function service(planOverrides: Record<string, unknown> = {}, candidates: unknow
         return null;
       },
     },
-  } as any;
+  };
+  prisma.$transaction = async (callback: (tx: any) => unknown, options: any) => {
+    prisma.lastTransactionOptions = options;
+    return callback(prisma);
+  };
 
   return new PerformanceAssignmentService(prisma);
 }
@@ -166,5 +171,56 @@ test('assessor assignment is frozen after the performance cycle closes', async (
   await assert.rejects(
     () => service({ cycle: { status: 'CLOSED' } }, [employee('reviewer-1')]).assignAssessors('plan-1', { reviewerId: 'reviewer-1' }, admin),
     (error: unknown) => error instanceof BadRequestException && /after the performance cycle is closed/i.test((error as Error).message),
+  );
+});
+
+
+test('assessor assignment uses a serializable transaction and conditional plan update', async () => {
+  const plan = {
+    id: 'plan-1',
+    status: 'IN_REVIEW',
+    cycle: { status: 'OPEN' },
+    employeeId: 'employee-1',
+    reviewerId: null,
+    finalAssessorId: null,
+    assessments: [],
+    employee: { id: 'employee-1', organisationId: 'org-a' },
+  };
+  let isolationLevel: string | undefined;
+  let where: any;
+  const prisma: any = {
+    performancePlan: {
+      findUnique: async () => plan,
+      updateMany: async (args: any) => { where = args.where; return { count: 1 }; },
+    },
+    employee: {
+      findMany: async () => [ { ...employee('reviewer-1'), employmentStatus: 'ACTIVE' } ],
+    },
+    $transaction: async (callback: (tx: any) => unknown, options: any) => {
+      isolationLevel = options?.isolationLevel;
+      return callback(prisma);
+    },
+  };
+  const service = new PerformanceAssignmentService(prisma);
+  await service.assignAssessors('plan-1', { reviewerId: 'reviewer-1' }, admin);
+  assert.equal(isolationLevel, 'Serializable');
+  assert.deepEqual(where.status, { notIn: ['APPROVED', 'LOCKED'] });
+  assert.deepEqual(where.cycle, { is: { status: { not: 'CLOSED' } } });
+});
+
+test('assessor assignment reports a concurrent serializable write conflict clearly', async () => {
+  const prisma: any = {
+    performancePlan: { findUnique: async () => ({
+      id: 'plan-1', status: 'IN_REVIEW', cycle: { status: 'OPEN' },
+      employeeId: 'employee-1', reviewerId: null, finalAssessorId: null,
+      assessments: [], employee: { id: 'employee-1', organisationId: 'org-a' },
+    }) },
+    employee: { findMany: async () => [] },
+    $transaction: async () => { throw { code: 'P2034' }; },
+  };
+  const service = new PerformanceAssignmentService(prisma);
+  await assert.rejects(
+    () => service.assignAssessors('plan-1', {}, admin),
+    (error: unknown) => error instanceof BadRequestException && /changed concurrently/i.test((error as Error).message),
   );
 });
